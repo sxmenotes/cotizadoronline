@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "plans": [
+    {
+      "id": "landing",
+      "name": "Plan Landing básico",
+      "pages": 1,
+      "build": { "price": 100000, "desc": "1 landing page" },
+      "sale": { "price": 150000, "desc": "1 landing page + código fuente completo" }
+    },
+    {
+      "id": "landingPlus",
+      "name": "Plan Landing full",
+      "pages": 3,
+      "build": { "price": 120000, "desc": "Landing page + 2 páginas adicionales" },
+      "sale": { "price": 190000, "desc": "Landing + 2 páginas + código fuente completo" }
+    },
+    {
+      "id": "landingFull",
+      "name": "Plan Landing Premium",
+      "pages": 5,
+      "build": { "price": 140000, "desc": "Landing page + 4 páginas adicionales" },
+      "sale": { "price": 230000, "desc": "Landing + 4 páginas + código fuente completo" }
+    }
+  ],
+  "subscriptions": [
+    { "id": "none", "name": "Ninguno", "price": 0, "desc": "Sin mantención mensual." },
+    { "id": "basico", "name": "Básico", "price": 40000, "desc": "Mantenimiento activo, 1 cambio menor al mes. Sin dominio ni hosting." },
+    { "id": "full", "name": "Full", "price": 50000, "desc": "Todo lo Básico + 1 cambio adicional (2 total, ambos menores) + 1 pág extra al año." },
+    { "id": "premium", "name": "Premium", "price": 60000, "desc": "Todo lo Full + 3 cambios al mes (máx. 1 mayor gratis) + monitoreo de estadísticas." }
+  ],
+  "hosting": { "label": "Sí, alojar en su servidor", "monthlyPrice": 10000 },
+  "extraPagePrice": 15000,
+  "depositPercent": 50,
+  "deliveryBusinessDays": 8
+}
