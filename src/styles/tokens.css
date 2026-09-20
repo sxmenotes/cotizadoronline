@@ -1,0 +1,28 @@
+:root {
+  --color-navy-950: #0E1A2E;
+  --color-navy-900: #14243F;
+  --color-navy-800: #1A2E50;
+  --color-navy-700: #22385B;
+  --color-navy-600: #2F4A75;
+  --color-navy-500: #45659A;
+  --color-navy-300: #9DB2D3;
+  --color-navy-100: #DCE4F0;
+  --color-navy-50: #EEF2F8;
+
+  --color-paper: #FBFAF7;
+  --color-paper-2: #F4F1EA;
+  --color-ink: #172033;
+  --color-ink-muted: #5A6478;
+  --color-ink-subtle: #8A93A5;
+  --color-hairline: rgba(34, 56, 91, 0.14);
+
+  --color-brass: #B48A3C;
+  --color-brass-100: #F3E9D2;
+
+  --color-success: #2E7D5B;
+  --color-warning: #B7791F;
+  --color-danger: #B4443A;
+
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
