@@ -1,21 +1,68 @@
-import React from 'react';
-import { SectionHeader, Card } from '../../ui';
-import { Sliders } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Tabs, TabsList, TabsTrigger, TabsContent, SectionHeader } from '../../ui';
+import { CatalogTab } from './CatalogTab';
+import { TermsTab } from './TermsTab';
+import { IssuerTab } from './IssuerTab';
+import { CurrencyTab } from './CurrencyTab';
+import { DataTab } from './DataTab';
+import { useSettingsStore } from '../../store/settingsStore';
 
 export const SettingsPage: React.FC = () => {
+  const { tab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+  const { hydrate, isHydrated } = useSettingsStore();
+
+  useEffect(() => {
+    if (!isHydrated) {
+      hydrate();
+    }
+  }, [isHydrated, hydrate]);
+
+  const activeTab = tab || 'catalogo';
+
+  const handleTabChange = (newTab: string) => {
+    navigate(`/ajustes/${newTab}`);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader
-        eyebrow="Configuración"
+        eyebrow="Configuración del Sistema"
         title="Ajustes de la Plataforma"
-        description="Gestión de catálogo de precios, cláusulas, emisor y respaldo de base de datos."
+        description="Personaliza tarifas vigentes, cláusulas normativas, identidad corporativa y copias de seguridad."
+        hasHairline={false}
       />
-      <Card className="p-6">
-        <div className="flex items-center gap-3 text-ink-muted">
-          <Sliders className="h-5 w-5 text-navy-600" />
-          <p className="text-sm">Panel de Ajustes en inicialización (Fase 5)</p>
-        </div>
-      </Card>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="catalogo">Catálogo de Planes</TabsTrigger>
+          <TabsTrigger value="condiciones">Condiciones & Cláusulas</TabsTrigger>
+          <TabsTrigger value="emisor">Emisor & Marca</TabsTrigger>
+          <TabsTrigger value="moneda">Tipo de Cambio</TabsTrigger>
+          <TabsTrigger value="datos">Respaldo & Datos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="catalogo">
+          <CatalogTab />
+        </TabsContent>
+
+        <TabsContent value="condiciones">
+          <TermsTab />
+        </TabsContent>
+
+        <TabsContent value="emisor">
+          <IssuerTab />
+        </TabsContent>
+
+        <TabsContent value="moneda">
+          <CurrencyTab />
+        </TabsContent>
+
+        <TabsContent value="datos">
+          <DataTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

@@ -55,6 +55,7 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'primary';
+  children?: React.ReactNode;
   onConfirm: () => void;
 }
 

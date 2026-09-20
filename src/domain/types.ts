@@ -28,12 +28,12 @@ export interface Catalog {
 }
 
 export type ContentBlock =
-  | { type: 'paragraph'; content: string; showWhen?: { projectType?: ProjectType } | undefined }
-  | { type: 'list'; items: string[]; showWhen?: { projectType?: ProjectType } | undefined }
-  | { type: 'table'; rows: string[][]; showWhen?: { projectType?: ProjectType } | undefined }
-  | { type: 'callout'; content: string; title?: string | undefined; showWhen?: { projectType?: ProjectType } | undefined }
-  | { type: 'catalogTable'; source: 'plans' | 'subscriptions'; showWhen?: { projectType?: ProjectType } | undefined }
-  | { type: 'tags'; tags: string[]; showWhen?: { projectType?: ProjectType } | undefined };
+  | { type: 'paragraph'; content: string; showWhen?: { projectType?: ProjectType | undefined } | undefined }
+  | { type: 'list'; items: string[]; showWhen?: { projectType?: ProjectType | undefined } | undefined }
+  | { type: 'table'; rows: string[][]; showWhen?: { projectType?: ProjectType | undefined } | undefined }
+  | { type: 'callout'; content: string; title?: string | undefined; showWhen?: { projectType?: ProjectType | undefined } | undefined }
+  | { type: 'catalogTable'; source: 'plans' | 'subscriptions'; showWhen?: { projectType?: ProjectType | undefined } | undefined }
+  | { type: 'tags'; tags: string[]; showWhen?: { projectType?: ProjectType | undefined } | undefined };
 
 export interface TermsSection {
   id: string;
