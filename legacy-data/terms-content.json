@@ -199,7 +199,7 @@
           },
           {
             "type": "callout",
-            "content": "EJEMPLO Pagaste {{build:landing}} por el plan Landing básico y estuviste algunos meses en suscripción. Ahora quieres el código fuente → pagas {{sale:landing}} − $100.000 = {{sub:full}} por el código completo."
+            "content": "EJEMPLO Pagaste {{build:landing}} por el plan Landing básico y estuviste algunos meses en suscripción. Ahora quieres el código fuente → pagas {{sale:landing}} − {{build:landing}} por el código completo."
           },
           {
             "type": "paragraph",
