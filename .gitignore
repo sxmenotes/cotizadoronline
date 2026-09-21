@@ -32,3 +32,4 @@ blob-report/
 # Antigravity artifacts/scratch
 .tempmediaStorage/
 scratch/
+.playwright-mcp/

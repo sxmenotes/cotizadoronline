@@ -1,33 +1,32 @@
 import React from 'react';
-import { Document, Page, View, Image, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import type { SkeletonDesign } from '../../../domain/types';
 import { PdfText } from '../../../pdf/PdfText';
 import { ISOLOGO_BLACK_BASE64 } from '../../../pdf/brandLogos';
-import { registerPdfFonts } from '../../../pdf/fonts';
 import { PdfWireframeRenderer } from './renderers/pdf';
+import { registerPdfFonts } from '../../../pdf/fonts';
 import { getWireframeBlockTree, getGlobalNavbarTree, getGlobalFooterTree, BLOCK_METAS } from './blocks';
 
-// Registrar fuentes locales Inter y Newsreader
+// Registrar fuentes locales Inter, Newsreader y todas las de diseño
 registerPdfFonts();
 
 // Estilos base A4 para el documento del Esqueleto
-const styles = StyleSheet.create({
-  page: {
-    paddingTop: 48,
-    paddingBottom: 54,
-    paddingHorizontal: 44,
+const styles = StyleSheet.create({  page: {
+    paddingTop: 36,
+    paddingBottom: 40,
+    paddingHorizontal: 36,
     backgroundColor: '#FFFFFF',
     fontFamily: 'Inter',
   },
   fixedHeader: {
     position: 'absolute',
-    top: 24,
-    left: 44,
-    right: 44,
+    top: 18,
+    left: 36,
+    right: 36,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingBottom: 6,
     borderBottomWidth: 0.5,
     borderBottomColor: '#E2E8F0',
   },
@@ -37,17 +36,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerLogo: {
-    width: 18,
-    height: 18,
+    width: 14,
+    height: 14,
   },
   headerBrand: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: 700,
     letterSpacing: 1.2,
     color: '#0F172A',
   },
   headerTag: {
-    fontSize: 7.5,
+    fontSize: 7,
     fontWeight: 600,
     letterSpacing: 1,
     color: '#94A3B8',
@@ -55,39 +54,39 @@ const styles = StyleSheet.create({
   },
   fixedFooter: {
     position: 'absolute',
-    bottom: 24,
-    left: 44,
-    right: 44,
+    bottom: 18,
+    left: 36,
+    right: 36,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 6,
     borderTopWidth: 0.5,
     borderTopColor: '#E2E8F0',
   },
   footerText: {
-    fontSize: 8,
+    fontSize: 7.5,
     color: '#64748B',
   },
   // Página 1: Resumen
   titleSection: {
-    marginTop: 16,
-    marginBottom: 20,
+    marginTop: 10,
+    marginBottom: 10,
   },
   eyebrow: {
-    fontSize: 8.5,
+    fontSize: 8,
     fontWeight: 600,
     color: '#B8860B',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   mainTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 600,
     color: '#0F172A',
     fontFamily: 'Newsreader',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   metaGrid: {
     flexDirection: 'row',
@@ -95,15 +94,15 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: '#E2E8F0',
     borderRadius: 6,
-    padding: 12,
-    marginBottom: 16,
-    gap: 16,
+    padding: 8,
+    marginBottom: 10,
+    gap: 12,
   },
   metaItem: {
     flex: 1,
   },
   metaLabel: {
-    fontSize: 7.5,
+    fontSize: 7,
     fontWeight: 600,
     color: '#64748B',
     textTransform: 'uppercase',
@@ -111,29 +110,29 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   metaValue: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: 600,
     color: '#0F172A',
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     color: '#0F172A',
     fontFamily: 'Newsreader',
     borderBottomWidth: 0.5,
     borderBottomColor: '#CBD5E1',
-    paddingBottom: 4,
-    marginTop: 10,
-    marginBottom: 8,
+    paddingBottom: 3,
+    marginTop: 6,
+    marginBottom: 6,
   },
   paletteGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 10,
   },
   paletteCard: {
     flex: 1,
-    padding: 6,
+    padding: 5,
     borderRadius: 4,
     borderWidth: 0.5,
     borderColor: '#E2E8F0',
@@ -142,57 +141,66 @@ const styles = StyleSheet.create({
   },
   colorSwatch: {
     width: '100%',
-    height: 20,
+    height: 16,
     borderRadius: 3,
-    marginBottom: 4,
+    marginBottom: 3,
     borderWidth: 0.5,
     borderColor: '#00000015',
   },
   colorRole: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontWeight: 600,
     color: '#475569',
     textTransform: 'uppercase',
   },
   colorHex: {
-    fontSize: 7.5,
+    fontSize: 7,
     fontFamily: 'Inter',
     color: '#0F172A',
   },
   didacticBox: {
     backgroundColor: '#FEF9C3',
-    borderWidth: 0.5,
-    borderColor: '#FDE047',
+    borderWidth: 1,
+    borderColor: '#EAB308',
     borderRadius: 6,
-    padding: 10,
-    marginTop: 12,
-    marginBottom: 12,
+    padding: 8,
+    marginTop: 6,
+    marginBottom: 8,
   },
   didacticTitle: {
     fontSize: 8.5,
     fontWeight: 700,
-    color: '#713F12',
+    color: '#854D0E',
     marginBottom: 2,
   },
   didacticText: {
-    fontSize: 8,
-    color: '#854D0E',
+    fontSize: 7.5,
+    color: '#713F12',
     lineHeight: 1.3,
   },
-  glossaryItem: {
+  glossaryGrid: {
     flexDirection: 'row',
-    marginBottom: 6,
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  glossaryItem: {
+    width: '49%',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 0.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 5,
+    padding: 5,
   },
   glossaryBadge: {
-    width: 90,
     fontSize: 7.5,
     fontWeight: 700,
-    color: '#1E293B',
+    color: '#0F172A',
+    marginBottom: 2,
+    textTransform: 'uppercase',
   },
   glossaryDesc: {
-    flex: 1,
-    fontSize: 7.5,
+    fontSize: 7,
     color: '#475569',
     lineHeight: 1.3,
   },
@@ -267,11 +275,19 @@ export interface SkeletonDocumentProps {
   design: SkeletonDesign;
 }
 
-export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) => {
-  const { project, palette, typography, global: globalConfig, pages, notes } = design;
+export const SkeletonPages: React.FC<SkeletonDocumentProps> = ({ design }) => {
+  const {
+    project,
+    palette,
+    typography,
+    pages,
+    global: globalConfig,
+    notes,
+    createdAt,
+  } = design;
 
   // Formato de fecha
-  const dateFormatted = new Date(design.updatedAt || design.createdAt).toLocaleDateString('es-CL', {
+  const dateFormatted = new Date(design.updatedAt || createdAt).toLocaleDateString('es-CL', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -282,16 +298,10 @@ export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) =>
     new Set(pages.flatMap((p) => p.sections.map((s) => s.type)))
   );
 
-  return (
-    <Document
-      title={`Esqueleto Web - ${project.project}`}
-      author="Samuel Valenzuela"
-      subject="Maqueta esquemática de estructura web"
-      creator="CREADOR PRESUP v2.0"
-    >
-      {/* PÁGINA 1: RESUMEN EDITORIAL Y GLOSARIO DIDÁCTICO */}
-      <Page size="A4" style={styles.page}>
-        {/* Cabecera Fija */}
+  return [
+    /* PÁGINA 1: RESUMEN EDITORIAL Y GLOSARIO DIDÁCTICO */
+    <Page key="resumen" size="A4" style={styles.page}>
+      {/* Cabecera Fija */}
         <View style={styles.fixedHeader} fixed>
           <View style={styles.headerLeft}>
             <Image src={ISOLOGO_BLACK_BASE64} style={styles.headerLogo} />
@@ -348,10 +358,12 @@ export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) =>
           <View style={styles.metaItem}>
             <PdfText style={styles.metaLabel}>Fuente de Títulos y Destacados</PdfText>
             <PdfText style={styles.metaValue}>{typography.headingFont}</PdfText>
+            <PdfText style={{ fontFamily: Font.getRegisteredFontFamilies().includes(typography.headingFont) ? typography.headingFont : 'Inter', fontSize: 18, marginTop: 4, color: '#0F172A' }}>AaBbCc 123</PdfText>
           </View>
           <View style={styles.metaItem}>
             <PdfText style={styles.metaLabel}>Fuente de Cuerpo y Botones</PdfText>
             <PdfText style={styles.metaValue}>{typography.bodyFont}</PdfText>
+            <PdfText style={{ fontFamily: Font.getRegisteredFontFamilies().includes(typography.bodyFont) ? typography.bodyFont : 'Inter', fontSize: 14, marginTop: 4, color: '#475569' }}>AaBbCc 123</PdfText>
           </View>
           <View style={styles.metaItem}>
             <PdfText style={styles.metaLabel}>Escala Visual</PdfText>
@@ -359,27 +371,28 @@ export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) =>
           </View>
         </View>
 
+        {/* Caja de Aviso Didáctico (Movida hacia arriba) */}
+        <View style={styles.didacticBox}>
+          <PdfText style={styles.didacticTitle}>Nota Didáctica sobre la Maqueta</PdfText>
+          <PdfText style={styles.didacticText}>
+            Este esqueleto presenta la distribución y el orden estratégico de las secciones acordado para el sitio web.
+            Los textos, botones e imágenes en gris son estrictamente referenciales para ilustrar la jerarquía visual y los pesos estructurales, y no representan el diseño visual (UI) definitivo.
+          </PdfText>
+        </View>
+
         {/* Glosario Didáctico de Secciones */}
-        <PdfText style={styles.sectionTitle}>Glosario Didáctico de Secciones Incluidas</PdfText>
-        <View style={{ marginBottom: 10 }}>
+        <PdfText style={styles.sectionTitle}>Glosario Didáctico de Secciones</PdfText>
+        <View style={styles.glossaryGrid}>
           {sectionTypesUsed.map((secType) => {
             const meta = BLOCK_METAS[secType];
+            if (!meta) return null;
             return (
               <View key={secType} style={styles.glossaryItem}>
-                <PdfText style={styles.glossaryBadge}>· {meta.name}:</PdfText>
+                <PdfText style={styles.glossaryBadge}>{meta.name}</PdfText>
                 <PdfText style={styles.glossaryDesc}>{meta.didacticExplanation}</PdfText>
               </View>
             );
           })}
-        </View>
-
-        {/* Caja de Aviso Didáctico */}
-        <View style={styles.didacticBox}>
-          <PdfText style={styles.didacticTitle}>Nota Didáctica sobre la Maqueta:</PdfText>
-          <PdfText style={styles.didacticText}>
-            Este esqueleto presenta la distribución y orden estratégico de secciones acordado para el sitio web.
-            Los textos, botones e imágenes en gris son referenciales para ilustrar la jerarquía visual antes de iniciar el diseño definitivo.
-          </PdfText>
         </View>
 
         {notes && notes.trim().length > 0 && (
@@ -399,10 +412,10 @@ export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) =>
             render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
           />
         </View>
-      </Page>
+      </Page>,
 
-      {/* PÁGINAS 2 A N: MAQUETA DE CADA PÁGINA DEL SITIO */}
-      {pages.map((sitePage, pageIdx) => {
+      /* PÁGINAS 2 A N: MAQUETA DE CADA PÁGINA DEL SITIO */
+      ...pages.map((sitePage, pageIdx) => {
         // Factor de escala k para que quepa en A4
         // kDesktop = 0.28, kMobile = 0.22
         const kDesktop = 0.26;
@@ -534,7 +547,20 @@ export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) =>
             </View>
           </Page>
         );
-      })}
+      }),
+  ];
+};
+
+export const SkeletonDocument: React.FC<SkeletonDocumentProps> = ({ design }) => {
+  return (
+    <Document
+      title={`Esqueleto_Web_${design.project.client.replace(/\s+/g, '_')}`}
+      author="Sistema"
+      subject={`Arquitectura y Wireframes para ${design.project.project}`}
+      creator="Creador de Presupuestos SV"
+      language="es-CL"
+    >
+      <SkeletonPages design={design} />
     </Document>
   );
 };

@@ -26,12 +26,14 @@ import {
 } from '../../ui';
 import { useQuotesStore } from '../../store/quotesStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useSkeletonStore } from '../../store/skeletonStore';
 import { calculatePricing, PricingResult } from '../../domain/pricing';
 import type { Quote, QuoteVersionType, ProjectType, CurrencyCode } from '../../domain/types';
 import { PdfPreview } from '../../pdf/PdfPreview';
 import { QuoteDocument } from '../../pdf/QuoteDocument';
 import { pdf } from '@react-pdf/renderer';
 import { generateQuotePdfFilename, downloadBlob } from '../../lib/utils';
+import { registerDynamicFont } from '../../pdf/fonts';
 
 export const QuoteEditorPage: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
@@ -61,11 +63,14 @@ export const QuoteEditorPage: React.FC = () => {
     hydrate: hydrateSettings,
   } = useSettingsStore();
 
+  const { skeletons, isHydrated: isSkeletonsHydrated, hydrate: hydrateSkeletons } = useSkeletonStore();
+
   // Asegurar hidratación
   useEffect(() => {
     if (!isQuotesHydrated) void hydrateQuotes();
     if (!isSettingsHydrated) void hydrateSettings();
-  }, [isQuotesHydrated, isSettingsHydrated, hydrateQuotes, hydrateSettings]);
+    if (!isSkeletonsHydrated) void hydrateSkeletons();
+  }, [isQuotesHydrated, isSettingsHydrated, isSkeletonsHydrated, hydrateQuotes, hydrateSettings, hydrateSkeletons]);
 
   // Estado del formulario
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null);
@@ -77,8 +82,13 @@ export const QuoteEditorPage: React.FC = () => {
   const [newRevisionNote, setNewRevisionNote] = useState('');
 
   // Inicializar o cargar cotización
+  const initializedKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isQuotesHydrated || !isSettingsHydrated) return;
+
+    const currentKey = id || 'new';
+    if (initializedKeyRef.current === currentKey) return;
+    initializedKeyRef.current = currentKey;
 
     if (id) {
       const found = quotes.find((q) => q.id === id);
@@ -159,6 +169,17 @@ export const QuoteEditorPage: React.FC = () => {
       if (isDraftSavingRef.current) clearTimeout(isDraftSavingRef.current);
     };
   }, [id, currentQuote, setDraft]);
+
+  // Registrar fuentes dinámicas del esqueleto vinculado (para evitar bugs de react-pdf en render)
+  useEffect(() => {
+    if (currentQuote?.includeSkeletonInPdf && currentQuote.linkedSkeletonId) {
+      const skel = skeletons.find(s => s.id === currentQuote.linkedSkeletonId);
+      if (skel) {
+        registerDynamicFont(skel.typography.headingFont);
+        registerDynamicFont(skel.typography.bodyFont);
+      }
+    }
+  }, [currentQuote?.includeSkeletonInPdf, currentQuote?.linkedSkeletonId, skeletons]);
 
   // Validaciones
   const validationErrors = useMemo(() => {
@@ -281,10 +302,14 @@ export const QuoteEditorPage: React.FC = () => {
     try {
       const filename = generateQuotePdfFilename(currentQuote.client, currentQuote.project, currentQuote.issuedOn);
 
+      const linkedSkeleton = (currentQuote.includeSkeletonInPdf && currentQuote.linkedSkeletonId)
+        ? skeletons.find(s => s.id === currentQuote.linkedSkeletonId)
+        : undefined;
+
       let blobToUse = pdfBlob;
       if (!blobToUse) {
         // Generar blob bajo demanda si el de vista previa aún no está listo
-        const doc = React.createElement(QuoteDocument, { quote: currentQuote }) as unknown as Parameters<typeof pdf>[0];
+        const doc = React.createElement(QuoteDocument, { quote: currentQuote, skeletonDesign: linkedSkeleton }) as unknown as Parameters<typeof pdf>[0];
         blobToUse = await pdf(doc).toBlob();
       }
 
@@ -547,6 +572,49 @@ export const QuoteEditorPage: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Vinculación con Esqueleto */}
+            <div className="pt-2 border-t border-hairline/60">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
+                Esqueleto de Diseño Web
+              </span>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select
+                  label="Vincular Esqueleto"
+                  options={[
+                    { value: '', label: 'Ninguno' },
+                    ...skeletons.map((skel) => ({
+                      value: skel.id,
+                      label: `${skel.name} (${skel.project.client})`,
+                    })),
+                  ]}
+                  value={currentQuote.linkedSkeletonId || ''}
+                  onChange={(e) => {
+                    updateField('linkedSkeletonId', e.target.value || undefined);
+                    if (!e.target.value) {
+                      updateField('includeSkeletonInPdf', false);
+                    }
+                  }}
+                />
+                
+                {currentQuote.linkedSkeletonId && (
+                  <div className="flex flex-col justify-center gap-1.5 rounded-lg border border-hairline bg-paper-1 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-navy-900">Adjuntar en PDF</p>
+                        <p className="text-[11px] text-ink-muted leading-tight">
+                          El esqueleto se añadirá como anexo al final del presupuesto.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={!!currentQuote.includeSkeletonInPdf}
+                        onCheckedChange={(checked) => updateField('includeSkeletonInPdf', checked)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </Card>
 
           {/* Tarjeta 2: Modalidad, Moneda y Plan */}
@@ -773,6 +841,7 @@ export const QuoteEditorPage: React.FC = () => {
           <Card className="overflow-hidden border-hairline bg-paper-2 p-2 sm:p-4 shadow-inner max-h-[85vh] overflow-y-auto">
             <PdfPreview
               quote={currentQuote}
+              skeletonDesign={(currentQuote.includeSkeletonInPdf && currentQuote.linkedSkeletonId) ? skeletons.find(s => s.id === currentQuote.linkedSkeletonId) : undefined}
               onBlobReady={(blob) => setPdfBlob(blob)}
             />
           </Card>

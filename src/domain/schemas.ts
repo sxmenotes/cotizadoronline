@@ -124,6 +124,8 @@ export const QuoteSchema = z.object({
   catalog: CatalogSchema,
   terms: TermsContentSchema,
   issuer: IssuerSchema,
+  linkedSkeletonId: z.string().optional(),
+  includeSkeletonInPdf: z.boolean().optional(),
 });
 
 export const HexColorRegex = /^#(?:[0-9a-fA-F]{3}){1,2}$/;

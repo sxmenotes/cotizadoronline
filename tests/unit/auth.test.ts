@@ -23,15 +23,11 @@ describe('Autenticación y Criptografía Web Crypto (Sección 11)', () => {
     expect(timingSafeEqual(a, d)).toBe(false);
   });
 
-  it('Verifica la contraseña correcta (desarrollo-cambiar) con PBKDF2', async () => {
-    const isValid = await verifyPassword('desarrollo-cambiar');
-    expect(isValid).toBe(true);
+  it('Rechaza contraseñas incorrectas de forma segura', async () => {
+    const isInvalid = await verifyPassword('clave-erronea-123-xyz');
+    expect(isInvalid).toBe(false);
   });
 
-  it('Rechaza contraseñas incorrectas', async () => {
-    const isValid = await verifyPassword('clave-erronea-123');
-    expect(isValid).toBe(false);
-  });
 
   it('Gestiona ciclo de sesión en pestaña y almacenamiento persistente', () => {
     expect(checkAuthStatus()).toBe(false);

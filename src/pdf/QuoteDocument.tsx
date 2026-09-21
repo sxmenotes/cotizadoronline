@@ -7,21 +7,23 @@ import {
   Link,
 } from '@react-pdf/renderer';
 import { PdfText as Text } from './PdfText';
-import type { Quote } from '../domain/types';
+import type { Quote, SkeletonDesign } from '../domain/types';
 import { calculatePricing } from '../domain/pricing';
 import { resolveTokens } from '../domain/tokens';
 import { registerPdfFonts } from './fonts';
 import { pdfStyles, pdfColors } from './styles';
 import { ISOLOGO_WHITE_BASE64, ISOLOGO_BLACK_BASE64 } from './brandLogos';
+import { SkeletonPages } from '../features/skeleton/wireframe/SkeletonDocument';
 
 // Registrar fuentes locales
 registerPdfFonts();
 
 export interface QuoteDocumentProps {
   quote: Quote;
+  skeletonDesign?: SkeletonDesign | undefined;
 }
 
-export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote }) => {
+export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDesign }) => {
   const {
     client,
     project,
@@ -490,6 +492,9 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote }) => {
           </Page>
         );
       })}
+
+      {/* Renderizar el Esqueleto de Diseño al final si está incluido */}
+      {skeletonDesign && <SkeletonPages design={skeletonDesign} />}
     </Document>
   );
 };

@@ -81,6 +81,8 @@ export interface Quote {
   catalog: Catalog;
   terms: TermsContent;
   issuer: Issuer;
+  linkedSkeletonId?: string | undefined;
+  includeSkeletonInPdf?: boolean | undefined;
 }
 
 export type SectionType =

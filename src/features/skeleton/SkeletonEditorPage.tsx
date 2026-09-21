@@ -71,6 +71,7 @@ import { DomWireframeRenderer } from './wireframe/renderers/dom';
 import { SkeletonDocument } from './wireframe/SkeletonDocument';
 import { pdf } from '@react-pdf/renderer';
 import { sanitizeFilename, downloadBlob } from '../../lib/utils';
+import { registerDynamicFont } from '../../pdf/fonts';
 
 // Elemento individual ordenable con @dnd-kit
 interface SortableSectionItemProps {
@@ -280,22 +281,35 @@ export const SkeletonEditorPage: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingPageName, setEditingPageName] = useState<string | null>(null);
 
-  // Autoguardado con debounce de 400ms
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
+  // Botón manual de guardado
+  const handleSave = async () => {
     setSaveStatus('Guardando…');
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    await saveCurrent();
+    const timeStr = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    setSaveStatus(`Guardado ✓ ${timeStr}`);
+    toast.success('Esqueleto guardado correctamente');
+  };
 
-    autoSaveTimerRef.current = setTimeout(async () => {
-      await saveCurrent();
-      const timeStr = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-      setSaveStatus(`Guardado ✓ ${timeStr}`);
-    }, 400);
+  // Inyectar fuentes de Google Fonts dinámicamente para el DOM
+  useEffect(() => {
+    const { headingFont, bodyFont } = current.typography;
+    const fontId = `google-font-${headingFont}-${bodyFont}`.replace(/\s+/g, '-');
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement('link');
+      link.id = fontId;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${headingFont.replace(/\s+/g, '+')}:wght@400;600;700&family=${bodyFont.replace(/\s+/g, '+')}:wght@400;500;600&display=swap`;
+      document.head.appendChild(link);
+    }
+  }, [current.typography.headingFont, current.typography.bodyFont]);
 
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
-  }, [current, saveCurrent]);
+  // Registrar fuentes para PDF de react-pdf (previene fallas en la exportación)
+  useEffect(() => {
+    if (current) {
+      registerDynamicFont(current.typography.headingFont);
+      registerDynamicFont(current.typography.bodyFont);
+    }
+  }, [current?.typography.headingFont, current?.typography.bodyFont]);
 
   // Medición no recursiva del contenedor para el ajuste de escala
   useEffect(() => {
@@ -385,8 +399,10 @@ export const SkeletonEditorPage: React.FC = () => {
       const blob = await pdf(doc).toBlob();
       downloadBlob(blob, filename);
       toast.success('PDF vectorial del esqueleto generado exitosamente');
-    } catch {
-      toast.error('Error al generar el PDF del esqueleto');
+    } catch (err: unknown) {
+      console.error('Error al generar PDF del esqueleto:', err);
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      toast.error(`Error al generar el PDF del esqueleto: ${msg}`);
     } finally {
       setIsExportingPdf(false);
     }
@@ -546,6 +562,17 @@ export const SkeletonEditorPage: React.FC = () => {
             title="Eliminar este esqueleto"
           >
             <Trash2 className="h-4 w-4" />
+          </Button>
+
+          {/* Botón Guardar */}
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleSave}
+            className="shadow-sm"
+          >
+            <Check className="h-4 w-4 mr-1.5" />
+            Guardar
           </Button>
 
           {/* Exportar PDF Vectorial */}

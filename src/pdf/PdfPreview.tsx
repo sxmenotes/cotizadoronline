@@ -1,24 +1,25 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { pdf } from '@react-pdf/renderer';
-import * as pdfjsLib from 'pdfjs-dist';
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { Quote } from '../domain/types';
+import type { Quote, SkeletonDesign } from '../domain/types';
 import { QuoteDocument } from './QuoteDocument';
 import { registerPdfFonts } from './fonts';
 import { Button } from '../ui/Button';
 import { RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 
 // Configurar worker de pdfjs-dist una sola vez
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+GlobalWorkerOptions.workerSrc = pdfjsWorker;
 registerPdfFonts();
 
 export interface PdfPreviewProps {
   quote: Quote;
+  skeletonDesign?: SkeletonDesign | undefined;
   className?: string;
   onBlobReady?: (blob: Blob) => void;
 }
 
-export const PdfPreview: React.FC<PdfPreviewProps> = ({ quote, className = '', onBlobReady }) => {
+export const PdfPreview: React.FC<PdfPreviewProps> = ({ quote, skeletonDesign, className = '', onBlobReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pagesCanvas, setPagesCanvas] = useState<{ id: number; dataUrl: string; width: number; height: number }[]>([]);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -26,6 +27,11 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ quote, className = '', o
   const [renderCount, setRenderCount] = useState<number>(0);
 
   const activeRenderId = useRef<number>(0);
+  const onBlobReadyRef = useRef(onBlobReady);
+
+  useEffect(() => {
+    onBlobReadyRef.current = onBlobReady;
+  }, [onBlobReady]);
 
   const generateAndRender = useCallback(async () => {
     const currentId = ++activeRenderId.current;
@@ -34,21 +40,21 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ quote, className = '', o
 
     try {
       // 1. Generar blob vectorial con @react-pdf/renderer
-      const doc = React.createElement(QuoteDocument, { quote }) as unknown as Parameters<typeof pdf>[0];
+      const doc = React.createElement(QuoteDocument, { quote, skeletonDesign }) as unknown as Parameters<typeof pdf>[0];
       const blob = await pdf(doc).toBlob();
 
       // Si otro render inició mientras generábamos este blob, cancelar
       if (currentId !== activeRenderId.current) return;
 
-      if (onBlobReady) {
-        onBlobReady(blob);
+      if (onBlobReadyRef.current) {
+        onBlobReadyRef.current(blob);
       }
 
       // 2. Cargar en pdfjs-dist
       const arrayBuffer = await blob.arrayBuffer();
       if (currentId !== activeRenderId.current) return;
 
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const loadingTask = getDocument({ data: arrayBuffer });
       const pdfDoc = await loadingTask.promise;
 
       if (currentId !== activeRenderId.current) return;
@@ -101,7 +107,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ quote, className = '', o
         setIsUpdating(false);
       }
     }
-  }, [quote, onBlobReady]);
+  }, [quote, skeletonDesign]);
 
   // Debounce de 500ms al cambiar la cotización
   useEffect(() => {
