@@ -7,7 +7,7 @@ export interface PricingInput {
   subscriptionId: string;
   hosting: boolean;
   currency: CurrencyCode;
-  exchangeRate?: number; // Requerido si currency === 'USD'
+  exchangeRate?: number | undefined; // Requerido si currency === 'USD'
   catalog: Catalog;
 }
 

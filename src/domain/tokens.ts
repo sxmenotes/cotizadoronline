@@ -4,7 +4,7 @@ import { formatCurrency, roundHalfUp } from './pricing';
 export interface TokenContext {
   catalog: Catalog;
   currency: CurrencyCode;
-  exchangeRate?: number;
+  exchangeRate?: number | undefined;
 }
 
 export const TOKEN_REGEX = /\{\{([^}]+)\}\}/g;
