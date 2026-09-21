@@ -10,9 +10,9 @@ if (!fs.existsSync(authPath)) {
 
 const auth = JSON.parse(fs.readFileSync(authPath, 'utf8'));
 
-// Comprobar si coincide con la clave de desarrollo "desarrollo-cambiar"
+// Comprobar si coincide con la clave de desarrollo "samu1234"
 const saltBuf = Buffer.from(auth.salt, 'base64');
-const testHash = crypto.pbkdf2Sync('desarrollo-cambiar', saltBuf, auth.iterations, 32, 'sha256').toString('base64');
+const testHash = crypto.pbkdf2Sync('samu1234', saltBuf, auth.iterations, 32, 'sha256').toString('base64');
 
 if (auth.hash === testHash) {
   if (process.env.ALLOW_DEV_PASSWORD === '1') {
