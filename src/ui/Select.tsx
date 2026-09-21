@@ -9,10 +9,10 @@ export interface SelectOption {
 }
 
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-  error?: string;
-  helperText?: string;
-  options?: SelectOption[];
+  label?: string | undefined;
+  error?: string | undefined;
+  helperText?: string | undefined;
+  options?: SelectOption[] | undefined;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(

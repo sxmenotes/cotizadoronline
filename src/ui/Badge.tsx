@@ -2,8 +2,8 @@ import React from 'react';
 import { cn } from '../lib/utils';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'navy' | 'brass' | 'success' | 'warning' | 'danger';
-  size?: 'sm' | 'md';
+  variant?: 'default' | 'navy' | 'brass' | 'success' | 'warning' | 'danger' | undefined;
+  size?: 'sm' | 'md' | undefined;
 }
 
 export const Badge: React.FC<BadgeProps> = ({

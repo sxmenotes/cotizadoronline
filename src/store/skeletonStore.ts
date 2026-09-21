@@ -97,8 +97,7 @@ export const useSkeletonStore = create<SkeletonStoreState>()(
         try {
           const stored = (await get<SkeletonDesign[]>(SKELETONS_KEY)) || [];
           setStore({ skeletons: stored, isHydrated: true });
-        } catch (e) {
-          console.error('Error hidratando esqueletos desde IndexedDB:', e);
+        } catch {
           setStore({ isHydrated: true });
         }
       },

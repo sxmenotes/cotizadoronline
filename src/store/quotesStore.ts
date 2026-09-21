@@ -36,8 +36,7 @@ export const useQuotesStore = create<QuotesState>((setStore, getStore) => ({
         draft: storedDraft,
         isHydrated: true,
       });
-    } catch (e) {
-      console.error('Error hidratando presupuestos desde IndexedDB:', e);
+    } catch {
       setStore({ isHydrated: true });
     }
   },

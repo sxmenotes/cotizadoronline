@@ -44,8 +44,7 @@ export const useSettingsStore = create<SettingsState>((setStore, getStore) => ({
       } else {
         setStore({ isHydrated: true });
       }
-    } catch (e) {
-      console.error('Error hidratando ajustes desde IndexedDB:', e);
+    } catch {
       setStore({ isHydrated: true });
     }
   },

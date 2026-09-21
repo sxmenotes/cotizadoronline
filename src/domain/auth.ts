@@ -71,8 +71,7 @@ export async function verifyPassword(password: string): Promise<boolean> {
     const targetBytes = base64ToBytes(authConfig.hash);
 
     return timingSafeEqual(derivedBytes, targetBytes);
-  } catch (error) {
-    console.error('Error durante verificación de contraseña:', error);
+  } catch {
     return false;
   }
 }
