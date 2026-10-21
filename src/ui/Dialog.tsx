@@ -56,7 +56,7 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   variant?: 'danger' | 'primary';
   children?: React.ReactNode;
-  onConfirm: () => void;
+  onConfirm: () => any;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -67,11 +67,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmLabel = 'Confirmar',
   cancelLabel = 'Cancelar',
   variant = 'danger',
+  children,
   onConfirm,
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={title} description={description}>
+      <DialogContent title={title} description={description} className="max-h-[90vh] overflow-y-auto">
+        {children}
         <div className="mt-4 flex justify-end gap-3">
           <Button
             type="button"
@@ -83,9 +85,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <Button
             type="button"
             variant={variant === 'danger' ? 'danger' : 'primary'}
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
+            onClick={async () => {
+              const res = await onConfirm();
+              if (res !== false) {
+                onOpenChange(false);
+              }
             }}
           >
             {confirmLabel}

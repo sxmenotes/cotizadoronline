@@ -31,22 +31,34 @@ export const CatalogTab: React.FC = () => {
   const [depositPercent, setDepositPercent] = useState(catalog.depositPercent);
   const [deliveryDays, setDeliveryDays] = useState(catalog.deliveryBusinessDays);
 
+  React.useEffect(() => {
+    setExtraPagePrice(catalog.extraPagePrice);
+    setHostingPrice(catalog.hosting.monthlyPrice);
+    setDepositPercent(catalog.depositPercent);
+    setDeliveryDays(catalog.deliveryBusinessDays);
+  }, [
+    catalog.extraPagePrice,
+    catalog.hosting.monthlyPrice,
+    catalog.depositPercent,
+    catalog.deliveryBusinessDays,
+  ]);
+
   const handleSaveGeneral = async () => {
     await updateCatalog({
       ...catalog,
-      extraPagePrice: Number(extraPagePrice),
-      hosting: { ...catalog.hosting, monthlyPrice: Number(hostingPrice) },
-      depositPercent: Number(depositPercent),
-      deliveryBusinessDays: Number(deliveryDays),
+      extraPagePrice: Number(extraPagePrice) || 0,
+      hosting: { ...catalog.hosting, monthlyPrice: Number(hostingPrice) || 0 },
+      depositPercent: Number(depositPercent) || 0,
+      deliveryBusinessDays: Number(deliveryDays) || 1,
     });
-    toast.success('Parámetros generales guardados');
+    toast.success('Parámetros comerciales guardados');
   };
 
   const handleSavePlan = async () => {
-    if (!editingPlan) return;
-    if (!editingPlan.id || !editingPlan.name) {
+    if (!editingPlan) return false;
+    if (!editingPlan.id || !editingPlan.name.trim()) {
       toast.error('Nombre e ID son obligatorios');
-      return;
+      return false;
     }
 
     const plans = [...catalog.plans];
@@ -60,6 +72,7 @@ export const CatalogTab: React.FC = () => {
     await updateCatalog({ ...catalog, plans });
     setEditingPlan(null);
     toast.success('Plan guardado exitosamente');
+    return true;
   };
 
   const handleDeletePlan = async (id: string) => {
@@ -74,7 +87,11 @@ export const CatalogTab: React.FC = () => {
   };
 
   const handleSaveSub = async () => {
-    if (!editingSub) return;
+    if (!editingSub) return false;
+    if (!editingSub.id || !editingSub.name.trim()) {
+      toast.error('Nombre e ID son obligatorios');
+      return false;
+    }
     const subs = [...catalog.subscriptions];
     const index = subs.findIndex((s) => s.id === editingSub.id);
     if (index >= 0) {
@@ -86,6 +103,7 @@ export const CatalogTab: React.FC = () => {
     await updateCatalog({ ...catalog, subscriptions: subs });
     setEditingSub(null);
     toast.success('Suscripción guardada');
+    return true;
   };
 
   const handleDeleteSub = async (id: string) => {
@@ -269,29 +287,31 @@ export const CatalogTab: React.FC = () => {
             <Input
               label="Página Adicional (CLP)"
               type="number"
-              value={extraPagePrice}
-              onChange={(e) => setExtraPagePrice(Number(e.target.value))}
+              min={0}
+              value={extraPagePrice === 0 ? '' : extraPagePrice}
+              onChange={(e) => setExtraPagePrice(e.target.value === '' ? 0 : Number(e.target.value))}
             />
             <Input
               label="Hosting Mensual (CLP)"
               type="number"
-              value={hostingPrice}
-              onChange={(e) => setHostingPrice(Number(e.target.value))}
+              min={0}
+              value={hostingPrice === 0 ? '' : hostingPrice}
+              onChange={(e) => setHostingPrice(e.target.value === '' ? 0 : Number(e.target.value))}
             />
             <Input
               label="Abono Inicial (%)"
               type="number"
               min={0}
               max={100}
-              value={depositPercent}
-              onChange={(e) => setDepositPercent(Number(e.target.value))}
+              value={depositPercent === 0 ? '' : depositPercent}
+              onChange={(e) => setDepositPercent(e.target.value === '' ? 0 : Number(e.target.value))}
             />
             <Input
               label="Plazo Promedio (Días hábiles)"
               type="number"
               min={1}
-              value={deliveryDays}
-              onChange={(e) => setDeliveryDays(Number(e.target.value))}
+              value={deliveryDays === 0 ? '' : deliveryDays}
+              onChange={(e) => setDeliveryDays(e.target.value === '' ? 0 : Number(e.target.value))}
             />
           </div>
 
@@ -311,9 +331,14 @@ export const CatalogTab: React.FC = () => {
           title="Editar Plan de Desarrollo"
           description="Modifica los precios y descripciones para cotizaciones futuras."
           confirmLabel="Guardar Cambios"
+          variant="primary"
           onConfirm={handleSavePlan}
         >
           <div className="flex flex-col gap-4 py-2">
+            <div className="flex items-center justify-between rounded bg-paper-2 px-3 py-1.5 text-xs text-ink-muted">
+              <span>Identificador:</span>
+              <span className="font-mono font-semibold text-navy-900">{editingPlan.id}</span>
+            </div>
             <Input
               label="Nombre del Plan"
               value={editingPlan.name}
@@ -324,37 +349,41 @@ export const CatalogTab: React.FC = () => {
             <Input
               label="Páginas Incluidas"
               type="number"
-              value={editingPlan.pages}
+              min={1}
+              value={editingPlan.pages === 0 ? '' : editingPlan.pages}
               onChange={(e) =>
-                setEditingPlan({ ...editingPlan, pages: Number(e.target.value) })
+                setEditingPlan({ ...editingPlan, pages: e.target.value === '' ? 0 : Number(e.target.value) })
               }
             />
             <div className="grid grid-cols-2 gap-4">
               <Input
                 label="Precio Construcción (CLP)"
                 type="number"
-                value={editingPlan.build.price}
+                min={0}
+                value={editingPlan.build.price === 0 ? '' : editingPlan.build.price}
                 onChange={(e) =>
                   setEditingPlan({
                     ...editingPlan,
-                    build: { ...editingPlan.build, price: Number(e.target.value) },
+                    build: { ...editingPlan.build, price: e.target.value === '' ? 0 : Number(e.target.value) },
                   })
                 }
               />
               <Input
                 label="Precio Venta (CLP)"
                 type="number"
-                value={editingPlan.sale.price}
+                min={0}
+                value={editingPlan.sale.price === 0 ? '' : editingPlan.sale.price}
                 onChange={(e) =>
                   setEditingPlan({
                     ...editingPlan,
-                    sale: { ...editingPlan.sale, price: Number(e.target.value) },
+                    sale: { ...editingPlan.sale, price: e.target.value === '' ? 0 : Number(e.target.value) },
                   })
                 }
               />
             </div>
             <Textarea
               label="Descripción Construcción"
+              rows={2}
               value={editingPlan.build.desc}
               onChange={(e) =>
                 setEditingPlan({
@@ -365,6 +394,7 @@ export const CatalogTab: React.FC = () => {
             />
             <Textarea
               label="Descripción Venta"
+              rows={2}
               value={editingPlan.sale.desc}
               onChange={(e) =>
                 setEditingPlan({
@@ -385,9 +415,14 @@ export const CatalogTab: React.FC = () => {
           title="Editar Nivel de Suscripción"
           description="Configura el nombre, precio y alcance del soporte mensual."
           confirmLabel="Guardar Cambios"
+          variant="primary"
           onConfirm={handleSaveSub}
         >
           <div className="flex flex-col gap-4 py-2">
+            <div className="flex items-center justify-between rounded bg-paper-2 px-3 py-1.5 text-xs text-ink-muted">
+              <span>Identificador:</span>
+              <span className="font-mono font-semibold text-navy-900">{editingSub.id}</span>
+            </div>
             <Input
               label="Nombre de la Suscripción"
               value={editingSub.name}
@@ -398,14 +433,16 @@ export const CatalogTab: React.FC = () => {
             <Input
               label="Precio Mensual (CLP)"
               type="number"
-              value={editingSub.price}
+              min={0}
+              value={editingSub.price === 0 ? '' : editingSub.price}
               disabled={editingSub.id === 'none'}
               onChange={(e) =>
-                setEditingSub({ ...editingSub, price: Number(e.target.value) })
+                setEditingSub({ ...editingSub, price: e.target.value === '' ? 0 : Number(e.target.value) })
               }
             />
             <Textarea
               label="Descripción del Soporte"
+              rows={2}
               value={editingSub.desc}
               onChange={(e) =>
                 setEditingSub({ ...editingSub, desc: e.target.value })
@@ -427,7 +464,9 @@ export const CatalogTab: React.FC = () => {
         }
         confirmLabel="Eliminar Plan"
         variant="danger"
-        onConfirm={() => planToDelete && handleDeletePlan(planToDelete)}
+        onConfirm={() => {
+          if (planToDelete) handleDeletePlan(planToDelete);
+        }}
       />
 
       {/* Diálogo Confirmar Eliminar Suscripción */}
@@ -438,7 +477,9 @@ export const CatalogTab: React.FC = () => {
         description="Esta acción eliminará el nivel de suscripción del catálogo vigente."
         confirmLabel="Eliminar Suscripción"
         variant="danger"
-        onConfirm={() => subToDelete && handleDeleteSub(subToDelete)}
+        onConfirm={() => {
+          if (subToDelete) handleDeleteSub(subToDelete);
+        }}
       />
     </div>
   );

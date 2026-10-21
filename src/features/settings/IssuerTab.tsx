@@ -14,6 +14,15 @@ export const IssuerTab: React.FC = () => {
   const [bankDetails, setBankDetails] = useState<string[]>([...issuer.bankDetails]);
   const [newBankLine, setNewBankLine] = useState('');
 
+  React.useEffect(() => {
+    setName(issuer.name);
+    setBrandSubtitle(issuer.brandSubtitle);
+    setDocumentTag(issuer.documentTag);
+    setServiceTagline(issuer.serviceTagline);
+    setFooterBrand(issuer.footerBrand);
+    setBankDetails([...issuer.bankDetails]);
+  }, [issuer]);
+
   const handleSave = async () => {
     await updateIssuer({
       ...issuer,

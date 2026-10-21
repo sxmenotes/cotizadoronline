@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { Button, Input, NumberStepper, Badge, SectionHeader } from '../../src/ui';
+import { Button, Input, NumberStepper, Badge, SectionHeader, ConfirmDialog } from '../../src/ui';
 import { AppShell } from '../../src/app/AppShell';
 
 describe('Sistema de Diseño - Componentes UI', () => {
@@ -79,5 +79,29 @@ describe('Sistema de Diseño - Componentes UI', () => {
     expect(screen.getAllByText('Presupuestos').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Esqueleto').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Ajustes').length).toBeGreaterThan(0);
+  });
+
+  it('renderiza ConfirmDialog mostrando su contenido infantil (children) y botones de acción', () => {
+    render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={() => {}}
+        title="Editar Plan"
+        description="Ajuste los valores"
+        confirmLabel="Guardar"
+        onConfirm={() => {}}
+      >
+        <div data-testid="plan-form-inputs">
+          <input placeholder="Nombre del Plan" />
+        </div>
+      </ConfirmDialog>
+    );
+
+    expect(screen.getByText('Editar Plan')).toBeDefined();
+    expect(screen.getByText('Ajuste los valores')).toBeDefined();
+    expect(screen.getByTestId('plan-form-inputs')).toBeDefined();
+    expect(screen.getByPlaceholderText('Nombre del Plan')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDefined();
   });
 });

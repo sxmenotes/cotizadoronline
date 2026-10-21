@@ -8,6 +8,11 @@ export const CurrencyTab: React.FC = () => {
   const [rate, setRate] = useState<number>(defaultExchangeRate);
   const [note, setNote] = useState<string>(defaultExchangeNote);
 
+  React.useEffect(() => {
+    setRate(defaultExchangeRate);
+    setNote(defaultExchangeNote);
+  }, [defaultExchangeRate, defaultExchangeNote]);
+
   const handleSave = async () => {
     if (!rate || rate <= 0) {
       toast.error('El tipo de cambio debe ser un número positivo');
