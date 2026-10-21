@@ -43,14 +43,23 @@ export const CatalogTab: React.FC = () => {
     catalog.deliveryBusinessDays,
   ]);
 
+  const syncDraftCatalog = async (updatedCatalog: typeof catalog) => {
+    const draft = useQuotesStore.getState().draft;
+    if (draft) {
+      await useQuotesStore.getState().setDraft({ ...draft, catalog: updatedCatalog });
+    }
+  };
+
   const handleSaveGeneral = async () => {
-    await updateCatalog({
+    const newCatalog = {
       ...catalog,
       extraPagePrice: Number(extraPagePrice) || 0,
       hosting: { ...catalog.hosting, monthlyPrice: Number(hostingPrice) || 0 },
       depositPercent: Number(depositPercent) || 0,
       deliveryBusinessDays: Number(deliveryDays) || 1,
-    });
+    };
+    await updateCatalog(newCatalog);
+    await syncDraftCatalog(newCatalog);
     toast.success('Parámetros comerciales guardados');
   };
 
@@ -69,7 +78,9 @@ export const CatalogTab: React.FC = () => {
       plans.push(editingPlan);
     }
 
-    await updateCatalog({ ...catalog, plans });
+    const newCatalog = { ...catalog, plans };
+    await updateCatalog(newCatalog);
+    await syncDraftCatalog(newCatalog);
     setEditingPlan(null);
     toast.success('Plan guardado exitosamente');
     return true;
@@ -81,7 +92,9 @@ export const CatalogTab: React.FC = () => {
       return;
     }
     const filtered = catalog.plans.filter((p) => p.id !== id);
-    await updateCatalog({ ...catalog, plans: filtered });
+    const newCatalog = { ...catalog, plans: filtered };
+    await updateCatalog(newCatalog);
+    await syncDraftCatalog(newCatalog);
     setPlanToDelete(null);
     toast.success('Plan eliminado del catálogo');
   };
@@ -100,7 +113,9 @@ export const CatalogTab: React.FC = () => {
       subs.push(editingSub);
     }
 
-    await updateCatalog({ ...catalog, subscriptions: subs });
+    const newCatalog = { ...catalog, subscriptions: subs };
+    await updateCatalog(newCatalog);
+    await syncDraftCatalog(newCatalog);
     setEditingSub(null);
     toast.success('Suscripción guardada');
     return true;
@@ -112,7 +127,9 @@ export const CatalogTab: React.FC = () => {
       return;
     }
     const filtered = catalog.subscriptions.filter((s) => s.id !== id);
-    await updateCatalog({ ...catalog, subscriptions: filtered });
+    const newCatalog = { ...catalog, subscriptions: filtered };
+    await updateCatalog(newCatalog);
+    await syncDraftCatalog(newCatalog);
     setSubToDelete(null);
     toast.success('Suscripción eliminada');
   };

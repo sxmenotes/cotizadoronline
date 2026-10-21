@@ -12,6 +12,7 @@ import {
   ExternalLink,
   ShieldCheck,
   CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 import {
   Button,
@@ -114,7 +115,10 @@ export const QuoteEditorPage: React.FC = () => {
       const defaultSub = catalog.subscriptions.find((s) => s.id === 'basico')?.id || 'none';
 
       if (draft && draft.client !== undefined) {
-        // Restaurar borrador con defaults
+        // Restaurar borrador con datos ingresados, pero SIEMPRE con catálogo, términos y emisor actualizados de Ajustes
+        const planExists = catalog.plans.some((p) => p.id === draft.planId);
+        const subExists = catalog.subscriptions.some((s) => s.id === draft.subscriptionId);
+
         setCurrentQuote({
           id: draft.id || crypto.randomUUID(),
           createdAt: draft.createdAt || new Date().toISOString(),
@@ -126,16 +130,16 @@ export const QuoteEditorPage: React.FC = () => {
           versionType: draft.versionType || 'first',
           versionNote: draft.versionNote || '',
           projectType: draft.projectType || 'construccion',
-          planId: draft.planId || defaultPlan,
+          planId: planExists ? (draft.planId || defaultPlan) : defaultPlan,
           extraPages: typeof draft.extraPages === 'number' ? draft.extraPages : 0,
-          subscriptionId: draft.subscriptionId || defaultSub,
+          subscriptionId: subExists ? (draft.subscriptionId || defaultSub) : defaultSub,
           hosting: draft.hosting !== undefined ? draft.hosting : true,
           currency: draft.currency || 'CLP',
           exchangeRate: draft.exchangeRate || defaultExchangeRate || 950,
           exchangeNote: draft.exchangeNote || defaultExchangeNote,
-          catalog: draft.catalog || catalog,
-          terms: draft.terms || terms,
-          issuer: draft.issuer || issuer,
+          catalog,
+          terms,
+          issuer,
           quoteMode: draft.quoteMode || 'standard',
           customConfig: draft.customConfig || undefined,
         });
@@ -168,6 +172,37 @@ export const QuoteEditorPage: React.FC = () => {
       }
     }
   }, [id, isQuotesHydrated, isSettingsHydrated, quotes, catalog, terms, issuer, defaultExchangeRate, defaultExchangeNote, draft, navigate]);
+
+  // Sincronizar reactivamente catálogo, términos y emisor actualizados desde Ajustes para nuevas cotizaciones / borrador
+  useEffect(() => {
+    if (!id && isSettingsHydrated) {
+      setCurrentQuote((prev) => {
+        if (!prev) return prev;
+        if (prev.catalog === catalog && prev.terms === terms && prev.issuer === issuer) {
+          return prev;
+        }
+        const planExists = catalog.plans.some((p) => p.id === prev.planId);
+        const nextPlanId = planExists ? prev.planId : (catalog.plans[0]?.id || 'landing');
+        const subExists = catalog.subscriptions.some((s) => s.id === prev.subscriptionId);
+        const nextSubId = subExists ? prev.subscriptionId : 'none';
+
+        return {
+          ...prev,
+          planId: nextPlanId,
+          subscriptionId: nextSubId,
+          catalog,
+          terms,
+          issuer,
+        };
+      });
+    }
+  }, [id, isSettingsHydrated, catalog, terms, issuer]);
+
+  // Detectar si una cotización histórica tiene tarifas desactualizadas respecto al catálogo de Ajustes
+  const isCatalogOutdated = useMemo(() => {
+    if (!currentQuote || !id) return false;
+    return JSON.stringify(currentQuote.catalog) !== JSON.stringify(catalog);
+  }, [currentQuote, id, catalog]);
 
   // Autoguardado de borrador (solo si es nuevo, debounce 400ms)
   const isDraftSavingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -547,6 +582,29 @@ export const QuoteEditorPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Aviso de tarifas congeladas para presupuestos existentes si el catálogo de Ajustes cambió */}
+      {id && isCatalogOutdated && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-brass-300 bg-brass-50 p-4 text-xs text-navy-950">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-brass-600 shrink-0" />
+            <span>
+              Este presupuesto histórico conserva las tarifas de su fecha de emisión. Hay valores actualizados en el Catálogo de Ajustes.
+            </span>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setCurrentQuote((prev) => (prev ? { ...prev, catalog, terms, issuer } : prev));
+              toast.success('Presupuesto actualizado con las tarifas y condiciones vigentes');
+            }}
+            className="shrink-0"
+          >
+            Actualizar a Tarifas Vigentes
+          </Button>
+        </div>
+      )}
 
       {/* Cuadrícula de 2 columnas: Formulario & Resumen Financiero a la izquierda, PDF Preview a la derecha */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">

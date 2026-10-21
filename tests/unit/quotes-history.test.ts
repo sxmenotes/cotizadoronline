@@ -146,4 +146,25 @@ describe('Store de Presupuestos (useQuotesStore)', () => {
     expect(useQuotesStore.getState().getQuoteById('test-quote-1')).toBeDefined();
     expect(useQuotesStore.getState().lastDeletedQuote).toBeNull();
   });
+
+  it('guarda y recupera borradores preservando la sincronización de catálogo', async () => {
+    const store = useQuotesStore.getState();
+    const modifiedCatalog = {
+      ...catalogSeed,
+      plans: catalogSeed.plans.map((p) =>
+        p.id === 'landing' ? { ...p, build: { ...p.build, price: 180000 } } : p
+      ),
+    };
+
+    await store.setDraft({
+      client: 'Nuevo Cliente',
+      project: 'Proyecto Alpha',
+      planId: 'landing',
+      catalog: modifiedCatalog,
+    });
+
+    const loadedDraft = useQuotesStore.getState().draft;
+    expect(loadedDraft?.client).toBe('Nuevo Cliente');
+    expect(loadedDraft?.catalog?.plans.find((p) => p.id === 'landing')?.build.price).toBe(180000);
+  });
 });
