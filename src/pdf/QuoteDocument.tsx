@@ -53,7 +53,11 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
     currency,
     exchangeRate,
     catalog,
+    quoteMode: quote.quoteMode,
+    customConfig: quote.customConfig,
   });
+
+  const isCustom = quote.quoteMode === 'custom' && !!quote.customConfig;
 
   const tokenContext = {
     catalog,
@@ -108,7 +112,7 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
         {/* Bloque Central Portada */}
         <View style={pdfStyles.coverMain}>
           <Text style={pdfStyles.coverTitle}>Propuesta de</Text>
-          <Text style={pdfStyles.coverTitle}>Servicios Web</Text>
+          <Text style={pdfStyles.coverTitle}>{isCustom ? 'Servicios' : 'Servicios Web'}</Text>
           <Text style={pdfStyles.coverDescription}>{issuer.serviceTagline}</Text>
 
           <View style={pdfStyles.coverClientBox}>
@@ -158,7 +162,9 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
           <View style={pdfStyles.metaItem}>
             <Text>
               <Text style={pdfStyles.metaLabel}>Modalidad: </Text>
-              {projectType === 'construccion'
+              {isCustom
+                ? 'Presupuesto Personalizado (A medida)'
+                : projectType === 'construccion'
                 ? 'Construcción y mantención'
                 : 'Venta con código fuente'}
             </Text>
@@ -189,115 +195,262 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
           </View>
         </View>
 
-        {/* Tabla 1: Inversión Inicial */}
-        <Text style={pdfStyles.sectionTitle}>1. Inversión inicial (Desarrollo)</Text>
-        <View style={pdfStyles.table} wrap={false}>
-          <View style={pdfStyles.tableHeaderRow}>
-            <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>CONCEPTO</Text>
-            <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>DETALLE</Text>
-            <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
-              MONTO ({currency})
-            </Text>
-          </View>
-
-          <View style={pdfStyles.tableRow}>
-            <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-              {plan.name}
-            </Text>
-            <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-              {projectType === 'construccion' ? plan.build.desc : plan.sale.desc}
-            </Text>
-            <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-              {pricing.formatted.baseAmount}
-            </Text>
-          </View>
-
-          {extraPages > 0 && (
-            <View style={pdfStyles.tableRow}>
-              <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                Páginas adicionales
-              </Text>
-              <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                {extraPages} página(s) extra(s)
-              </Text>
-              <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                {pricing.formatted.extraAmount}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Tabla 2: Suscripción y Alojamiento (Solo Construcción) */}
-        {projectType === 'construccion' && subscription && (
+        {/* Tabla 1: Inversión / Detalle */}
+        {isCustom ? (
           <>
-            <Text style={pdfStyles.sectionTitle}>2. Soporte mensual y alojamiento</Text>
+            <Text style={pdfStyles.sectionTitle}>1. Inversión y alcance del servicio</Text>
             <View style={pdfStyles.table} wrap={false}>
               <View style={pdfStyles.tableHeaderRow}>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>SERVICIO</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>COBERTURA</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>CONCEPTO</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>DETALLE Y ALCANCE</Text>
                 <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
-                  MENSUAL ({currency})
+                  MONTO ({currency})
                 </Text>
               </View>
 
               <View style={pdfStyles.tableRow}>
                 <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                  Plan {subscription.name}
+                  {quote.customConfig!.itemName || 'Presupuesto Personalizado'}
                 </Text>
-                <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                  {subscription.desc}
-                </Text>
+                <View style={[pdfStyles.tableCell, { width: '40%' }]}>
+                  {quote.customConfig!.description ? (
+                    <Text style={{ color: pdfColors.ink, marginBottom: 2 }}>
+                      {quote.customConfig!.description}
+                    </Text>
+                  ) : null}
+                  <Text style={{ color: pdfColors.inkMuted, fontSize: 8 }}>
+                    {quote.customConfig!.isOneTimePayment
+                      ? 'Modalidad: Pago único'
+                      : quote.customConfig!.paymentType === 'recurring'
+                      ? `Modalidad: Servicio recurrente (${quote.customConfig!.billingPeriod === 'yearly' ? 'Anual' : 'Mensual'})`
+                      : `Modalidad: Pago en ${quote.customConfig!.installmentsCount || 2} cuotas`}
+                    {quote.customConfig!.requiresDeposit
+                      ? ` · Abono inicial ${quote.customConfig!.depositPercent ?? 50}%`
+                      : quote.customConfig!.noDepositTiming === 'upfront' ||
+                        quote.customConfig!.depositOption === 'upfront' ||
+                        quote.customConfig!.depositOption === 'full_upfront'
+                      ? ' · Pago 100% anticipado'
+                      : ' · Pago 100% contraentrega'}
+                  </Text>
+                </View>
                 <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                  {pricing.formatted.subscriptionAmount}
+                  {pricing.formatted.baseAmount}
                 </Text>
               </View>
+            </View>
 
-              {hosting && (
-                <View style={pdfStyles.tableRow}>
-                  <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                    Alojamiento Web (Hosting)
+            {/* Si no es pago único y es recurrente, mostrar fila de recurrencia */}
+            {!quote.customConfig!.isOneTimePayment && quote.customConfig!.paymentType === 'recurring' && (
+              <>
+                <Text style={pdfStyles.sectionTitle}>2. Tarifa y cobro periódico</Text>
+                <View style={pdfStyles.table} wrap={false}>
+                  <View style={pdfStyles.tableHeaderRow}>
+                    <Text style={[pdfStyles.tableHeaderCell, { width: '50%' }]}>SERVICIO</Text>
+                    <Text style={[pdfStyles.tableHeaderCell, { width: '25%' }]}>PERIODICIDAD</Text>
+                    <Text style={[pdfStyles.tableHeaderCell, { width: '25%', textAlign: 'right' }]}>
+                      MONTO ({currency})
+                    </Text>
+                  </View>
+                  <View style={pdfStyles.tableRow}>
+                    <Text style={[pdfStyles.tableCell, { width: '50%', fontWeight: 700 }]}>
+                      {quote.customConfig!.itemName}
+                    </Text>
+                    <Text style={[pdfStyles.tableCell, { width: '25%', color: pdfColors.inkMuted }]}>
+                      {quote.customConfig!.billingPeriod === 'yearly' ? 'Cobro anual' : 'Cobro mensual'}
+                    </Text>
+                    <Text style={[pdfStyles.tableCellRight, { width: '25%' }]}>
+                      {pricing.formatted.monthlyTotal}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Caja de Resumen Financiero Personalizado */}
+            <View style={pdfStyles.summaryBox} wrap={false}>
+              <View style={pdfStyles.summaryRow}>
+                <Text style={{ color: pdfColors.inkMuted }}>
+                  {quote.customConfig!.isOneTimePayment ? 'Total inversión del servicio:' : 'Total inicial:'}
+                </Text>
+                <Text style={{ fontWeight: 700 }}>{pricing.formatted.initialTotal}</Text>
+              </View>
+
+              {quote.customConfig!.requiresDeposit ? (
+                <View style={pdfStyles.summaryRow}>
+                  <Text style={{ color: pdfColors.inkMuted }}>
+                    Abono inicial para comenzar ({quote.customConfig!.depositPercent ?? 50}%):
                   </Text>
-                  <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                    {catalog.hosting.label}
+                  <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
+                    {pricing.formatted.deposit}
                   </Text>
-                  <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                    {pricing.formatted.hostingAmount}
+                </View>
+              ) : quote.customConfig!.noDepositTiming === 'upfront' ||
+                quote.customConfig!.depositOption === 'upfront' ||
+                quote.customConfig!.depositOption === 'full_upfront' ? (
+                <View style={pdfStyles.summaryRow}>
+                  <Text style={{ color: pdfColors.inkMuted }}>Pago inicial anticipado (100%):</Text>
+                  <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
+                    {pricing.formatted.deposit}
+                  </Text>
+                </View>
+              ) : (
+                <View style={pdfStyles.summaryRow}>
+                  <Text style={{ color: pdfColors.inkMuted }}>Abono inicial requerido:</Text>
+                  <Text style={{ fontWeight: 700, color: pdfColors.inkMuted }}>No requiere (0%)</Text>
+                </View>
+              )}
+
+              <View style={pdfStyles.summaryRowHighlight}>
+                <Text>
+                  {quote.customConfig!.requiresDeposit
+                    ? 'Saldo contraentrega:'
+                    : quote.customConfig!.noDepositTiming === 'upfront' ||
+                      quote.customConfig!.depositOption === 'upfront' ||
+                      quote.customConfig!.depositOption === 'full_upfront'
+                    ? 'Saldo pendiente contraentrega:'
+                    : 'Monto total contraentrega:'}
+                </Text>
+                <Text>{pricing.formatted.balance}</Text>
+              </View>
+
+              {!quote.customConfig!.isOneTimePayment && quote.customConfig!.paymentType === 'recurring' && (
+                <View style={pdfStyles.summaryRow}>
+                  <Text style={{ color: pdfColors.inkMuted }}>Monto periódico posterior:</Text>
+                  <Text style={{ fontWeight: 700, color: pdfColors.navy900 }}>
+                    {pricing.formatted.monthlyTotal} ({quote.customConfig!.billingPeriod === 'yearly' ? 'anual' : 'mensual'})
                   </Text>
                 </View>
               )}
             </View>
+
+            {/* Condiciones de Entrega Personalizadas */}
+            <View style={pdfStyles.callout} wrap={false}>
+              <Text style={{ fontWeight: 700, marginBottom: 2 }}>Plazos y Condiciones de Entrega:</Text>
+              <Text>
+                {quote.customConfig!.deliveryConditions
+                  ? quote.customConfig!.deliveryConditions
+                  : quote.customConfig!.requiresDeposit
+                  ? `El servicio tiene un plazo estimado de entrega de ${quote.customConfig!.deliveryDays || catalog.deliveryBusinessDays} días hábiles a contar de la confirmación del abono inicial (${quote.customConfig!.depositPercent ?? 50}%) y recepción de los antecedentes solicitados. El saldo restante se cancela contraentrega a entera satisfacción del cliente.`
+                  : quote.customConfig!.noDepositTiming === 'upfront' ||
+                    quote.customConfig!.depositOption === 'upfront' ||
+                    quote.customConfig!.depositOption === 'full_upfront'
+                  ? `El servicio tiene un plazo estimado de entrega de ${quote.customConfig!.deliveryDays || catalog.deliveryBusinessDays} días hábiles a contar de la acreditación del pago total anticipado (100%) y recepción de los antecedentes requeridos. No existen pagos pendientes al momento de la entrega.`
+                  : `El servicio tiene un plazo estimado de entrega de ${quote.customConfig!.deliveryDays || catalog.deliveryBusinessDays} días hábiles. El pago total se realiza contraentrega una vez finalizado y aprobado el trabajo a entera satisfacción del cliente.`}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={pdfStyles.sectionTitle}>1. Inversión inicial (Desarrollo)</Text>
+            <View style={pdfStyles.table} wrap={false}>
+              <View style={pdfStyles.tableHeaderRow}>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>CONCEPTO</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>DETALLE</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
+                  MONTO ({currency})
+                </Text>
+              </View>
+
+              <View style={pdfStyles.tableRow}>
+                <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
+                  {plan.name}
+                </Text>
+                <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
+                  {projectType === 'construccion' ? plan.build.desc : plan.sale.desc}
+                </Text>
+                <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
+                  {pricing.formatted.baseAmount}
+                </Text>
+              </View>
+
+              {extraPages > 0 && (
+                <View style={pdfStyles.tableRow}>
+                  <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
+                    Páginas adicionales
+                  </Text>
+                  <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
+                    {extraPages} página(s) extra(s)
+                  </Text>
+                  <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
+                    {pricing.formatted.extraAmount}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Tabla 2: Suscripción y Alojamiento (Solo Construcción) */}
+            {projectType === 'construccion' && subscription && (
+              <>
+                <Text style={pdfStyles.sectionTitle}>2. Soporte mensual y alojamiento</Text>
+                <View style={pdfStyles.table} wrap={false}>
+                  <View style={pdfStyles.tableHeaderRow}>
+                    <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>SERVICIO</Text>
+                    <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>COBERTURA</Text>
+                    <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
+                      MENSUAL ({currency})
+                    </Text>
+                  </View>
+
+                  <View style={pdfStyles.tableRow}>
+                    <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
+                      Plan {subscription.name}
+                    </Text>
+                    <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
+                      {subscription.desc}
+                    </Text>
+                    <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
+                      {pricing.formatted.subscriptionAmount}
+                    </Text>
+                  </View>
+
+                  {hosting && (
+                    <View style={pdfStyles.tableRow}>
+                      <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
+                        Alojamiento Web (Hosting)
+                      </Text>
+                      <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
+                        {catalog.hosting.label}
+                      </Text>
+                      <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
+                        {pricing.formatted.hostingAmount}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            )}
+
+            {/* Caja de Resumen Financiero */}
+            <View style={pdfStyles.summaryBox} wrap={false}>
+              <View style={pdfStyles.summaryRow}>
+                <Text style={{ color: pdfColors.inkMuted }}>Total inversión inicial:</Text>
+                <Text style={{ fontWeight: 700 }}>{pricing.formatted.initialTotal}</Text>
+              </View>
+              <View style={pdfStyles.summaryRow}>
+                <Text style={{ color: pdfColors.inkMuted }}>
+                  Abono inicial para iniciar ({catalog.depositPercent}%):
+                </Text>
+                <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
+                  {pricing.formatted.deposit}
+                </Text>
+              </View>
+              <View style={pdfStyles.summaryRowHighlight}>
+                <Text>Saldo contraentrega:</Text>
+                <Text>{pricing.formatted.balance}</Text>
+              </View>
+            </View>
+
+            {/* Condiciones de Entrega */}
+            <View style={pdfStyles.callout} wrap={false}>
+              <Text style={{ fontWeight: 700, marginBottom: 2 }}>Plazos y Entrega:</Text>
+              <Text>
+                {projectType === 'construccion'
+                  ? `El desarrollo del sitio tiene un plazo promedio de ${catalog.deliveryBusinessDays} días hábiles una vez recibido el abono inicial y los contenidos necesarios. Contraentrega: Una vez pagado el saldo restante más el primer mes de mantención/hosting, se publica el sitio web.`
+                  : `El desarrollo tiene un plazo estimado de ${catalog.deliveryBusinessDays} días hábiles. El traspaso del código fuente se realizará una vez pagado el saldo total restante, en forma de repositorio GitHub o archivo comprimido.`}
+              </Text>
+            </View>
           </>
         )}
-
-        {/* Caja de Resumen Financiero */}
-        <View style={pdfStyles.summaryBox} wrap={false}>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={{ color: pdfColors.inkMuted }}>Total inversión inicial:</Text>
-            <Text style={{ fontWeight: 700 }}>{pricing.formatted.initialTotal}</Text>
-          </View>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={{ color: pdfColors.inkMuted }}>
-              Abono inicial para iniciar ({catalog.depositPercent}%):
-            </Text>
-            <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
-              {pricing.formatted.deposit}
-            </Text>
-          </View>
-          <View style={pdfStyles.summaryRowHighlight}>
-            <Text>Saldo contraentrega:</Text>
-            <Text>{pricing.formatted.balance}</Text>
-          </View>
-        </View>
-
-        {/* Condiciones de Entrega */}
-        <View style={pdfStyles.callout} wrap={false}>
-          <Text style={{ fontWeight: 700, marginBottom: 2 }}>Plazos y Entrega:</Text>
-          <Text>
-            {projectType === 'construccion'
-              ? `El desarrollo del sitio tiene un plazo promedio de ${catalog.deliveryBusinessDays} días hábiles una vez recibido el abono inicial y los contenidos necesarios. Contraentrega: Una vez pagado el saldo restante más el primer mes de mantención/hosting, se publica el sitio web.`
-              : `El desarrollo tiene un plazo estimado de ${catalog.deliveryBusinessDays} días hábiles. El traspaso del código fuente se realizará una vez pagado el saldo total restante, en forma de repositorio GitHub o archivo comprimido.`}
-          </Text>
-        </View>
 
         {/* Datos Bancarios */}
         <View style={{ marginTop: 6 }} wrap={false}>

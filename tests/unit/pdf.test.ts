@@ -171,4 +171,55 @@ describe('Documento PDF del Presupuesto (Sección 9.4)', () => {
     expect(fullText).toContain('Empresa Internacional de Servicios Mineros');
     expect(fullText).not.toMatch(/\{\{[^}]+\}\}/);
   });
+
+  it('Caso 6: Presupuesto Personalizado a Medida (Nombre personalizado, valor y abono)', async () => {
+    const quote = makeQuote({
+      quoteMode: 'custom',
+      customConfig: {
+        itemName: 'Desarrollo de Aplicación Móvil iOS/Android',
+        description: 'App nativa con sincronización en tiempo real y notificaciones push',
+        price: 750000,
+        isOneTimePayment: true,
+        paymentType: 'unique',
+        requiresDeposit: true,
+        depositPercent: 50,
+        deliveryDays: 15,
+      },
+    });
+    const doc = React.createElement(QuoteDocument, { quote });
+    const { fullText, numPages } = await extractPdfData(doc);
+
+    expect(numPages).toBeGreaterThanOrEqual(4);
+    expect(fullText).toContain('Desarrollo de Aplicación Móvil iOS/Android');
+    expect(fullText).toContain('App nativa con sincronización en tiempo real');
+    expect(fullText).toContain('Presupuesto Personalizado (A medida)');
+    expect(fullText).toContain('750.000');
+    expect(fullText).toContain('375.000'); // 50% abono
+    expect(fullText).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it('Caso 7: Presupuesto Personalizado sin abono con pago 100% anticipado', async () => {
+    const quote = makeQuote({
+      quoteMode: 'custom',
+      customConfig: {
+        itemName: 'Auditoría de Ciberseguridad Web',
+        description: 'Análisis de vulnerabilidades OWASP Top 10',
+        price: 450000,
+        isOneTimePayment: true,
+        paymentType: 'unique',
+        requiresDeposit: false,
+        noDepositTiming: 'upfront',
+        depositOption: 'upfront',
+        deliveryDays: 5,
+      },
+    });
+    const doc = React.createElement(QuoteDocument, { quote });
+    const { fullText, numPages } = await extractPdfData(doc);
+
+    expect(numPages).toBeGreaterThanOrEqual(4);
+    expect(fullText).toContain('Auditoría de Ciberseguridad Web');
+    expect(fullText).toContain('Pago 100% anticipado');
+    expect(fullText).toContain('450.000');
+    expect(fullText).not.toMatch(/\{\{[^}]+\}\}/);
+  });
 });

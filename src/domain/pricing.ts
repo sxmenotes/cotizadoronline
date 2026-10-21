@@ -1,4 +1,4 @@
-import type { Catalog, CurrencyCode, ProjectType } from './types';
+import type { Catalog, CurrencyCode, ProjectType, QuoteMode, CustomQuoteConfig } from './types';
 
 export interface PricingInput {
   projectType: ProjectType;
@@ -9,6 +9,8 @@ export interface PricingInput {
   currency: CurrencyCode;
   exchangeRate?: number | undefined; // Requerido si currency === 'USD'
   catalog: Catalog;
+  quoteMode?: QuoteMode | undefined;
+  customConfig?: CustomQuoteConfig | undefined;
 }
 
 export interface PricingLineItem {
@@ -91,9 +93,193 @@ export function calculatePricing(input: PricingInput): PricingResult {
     currency,
     exchangeRate,
     catalog,
+    quoteMode,
+    customConfig,
   } = input;
 
-  // Validaciones
+  // Si es presupuesto personalizado
+  if (quoteMode === 'custom' && customConfig) {
+    if (currency === 'USD' && (!exchangeRate || exchangeRate <= 0)) {
+      throw new PricingError('Se requiere un tipo de cambio válido mayor a 0 para moneda USD');
+    }
+
+    const basePriceCLP = customConfig.price || 0;
+    const isOneTime = customConfig.isOneTimePayment;
+    const reqDeposit = customConfig.requiresDeposit;
+    const depPercent = reqDeposit ? (customConfig.depositPercent ?? 50) : 0;
+
+    let initialTotalCLP = 0;
+    let depositCLP = 0;
+    let remainingDepositCLP = 0;
+    let monthlyTotalCLP = 0;
+    let balanceCLP = 0;
+
+    const isUpfront =
+      !reqDeposit &&
+      (customConfig.noDepositTiming === 'upfront' ||
+        customConfig.depositOption === 'upfront' ||
+        customConfig.depositOption === 'full_upfront');
+
+    if (isOneTime || customConfig.paymentType === 'unique') {
+      initialTotalCLP = basePriceCLP;
+      if (reqDeposit) {
+        depositCLP = roundHalfUp((initialTotalCLP * depPercent) / 100);
+        remainingDepositCLP = initialTotalCLP - depositCLP;
+        balanceCLP = remainingDepositCLP;
+      } else if (isUpfront) {
+        depositCLP = initialTotalCLP;
+        remainingDepositCLP = 0;
+        balanceCLP = 0;
+      } else {
+        depositCLP = 0;
+        remainingDepositCLP = initialTotalCLP;
+        balanceCLP = remainingDepositCLP;
+      }
+      monthlyTotalCLP = 0;
+    } else if (customConfig.paymentType === 'recurring') {
+      monthlyTotalCLP = basePriceCLP;
+      depositCLP = reqDeposit ? roundHalfUp((monthlyTotalCLP * depPercent) / 100) : 0;
+      initialTotalCLP = depositCLP;
+      remainingDepositCLP = 0;
+      balanceCLP = monthlyTotalCLP;
+    } else if (customConfig.paymentType === 'installments') {
+      initialTotalCLP = basePriceCLP;
+      const count = customConfig.installmentsCount || 2;
+      const cuotaCLP = roundHalfUp(basePriceCLP / count);
+      depositCLP = reqDeposit ? cuotaCLP : 0;
+      remainingDepositCLP = initialTotalCLP - depositCLP;
+      monthlyTotalCLP = cuotaCLP;
+      balanceCLP = remainingDepositCLP;
+    }
+
+    const detailText = customConfig.description
+      ? customConfig.description
+      : isOneTime
+      ? reqDeposit
+        ? `Pago único (Abono ${depPercent}% + Saldo contraentrega)`
+        : isUpfront
+        ? 'Pago 100% anticipado (por adelantado)'
+        : 'Pago 100% contraentrega (sin abono previo)'
+      : customConfig.paymentType === 'recurring'
+      ? `Servicio recurrente (${customConfig.billingPeriod === 'yearly' ? 'Anual' : 'Mensual'})`
+      : `Pago en ${customConfig.installmentsCount || 2} cuotas`;
+
+    if (currency === 'CLP') {
+      const lineItems: PricingLineItem[] = [
+        {
+          name: customConfig.itemName || 'Presupuesto Personalizado',
+          detail: detailText,
+          amount: basePriceCLP,
+          formatted: formatCurrency(basePriceCLP, 'CLP'),
+        },
+      ];
+
+      return {
+        currency: 'CLP',
+        baseAmount: basePriceCLP,
+        extraAmount: 0,
+        initialTotal: initialTotalCLP,
+        deposit: depositCLP,
+        remainingDeposit: remainingDepositCLP,
+        subscriptionAmount: monthlyTotalCLP,
+        hostingAmount: 0,
+        monthlyTotal: monthlyTotalCLP,
+        balance: balanceCLP,
+        formatted: {
+          baseAmount: formatCurrency(basePriceCLP, 'CLP'),
+          extraAmount: formatCurrency(0, 'CLP'),
+          initialTotal: formatCurrency(initialTotalCLP, 'CLP'),
+          deposit: formatCurrency(depositCLP, 'CLP'),
+          remainingDeposit: formatCurrency(remainingDepositCLP, 'CLP'),
+          subscriptionAmount: formatCurrency(monthlyTotalCLP, 'CLP'),
+          hostingAmount: formatCurrency(0, 'CLP'),
+          monthlyTotal: formatCurrency(monthlyTotalCLP, 'CLP'),
+          balance: formatCurrency(balanceCLP, 'CLP'),
+        },
+        lineItems,
+      };
+    }
+
+    // USD
+    const rate = exchangeRate!;
+    const toMinorUSD = (clp: number) => roundHalfUp((clp / rate) * 100);
+
+    const baseMinor = toMinorUSD(basePriceCLP);
+    let initialTotalMinor = 0;
+    let depositMinor = 0;
+    let remainingDepositMinor = 0;
+    let monthlyMinor = 0;
+    let balanceMinor = 0;
+
+    if (isOneTime || customConfig.paymentType === 'unique') {
+      initialTotalMinor = baseMinor;
+      if (reqDeposit) {
+        depositMinor = roundHalfUp((initialTotalMinor * depPercent) / 100);
+        remainingDepositMinor = initialTotalMinor - depositMinor;
+        balanceMinor = remainingDepositMinor;
+      } else if (isUpfront) {
+        depositMinor = initialTotalMinor;
+        remainingDepositMinor = 0;
+        balanceMinor = 0;
+      } else {
+        depositMinor = 0;
+        remainingDepositMinor = initialTotalMinor;
+        balanceMinor = remainingDepositMinor;
+      }
+      monthlyMinor = 0;
+    } else if (customConfig.paymentType === 'recurring') {
+      monthlyMinor = baseMinor;
+      depositMinor = reqDeposit ? roundHalfUp((monthlyMinor * depPercent) / 100) : 0;
+      initialTotalMinor = depositMinor;
+      remainingDepositMinor = 0;
+      balanceMinor = monthlyMinor;
+    } else if (customConfig.paymentType === 'installments') {
+      initialTotalMinor = baseMinor;
+      const count = customConfig.installmentsCount || 2;
+      const cuotaMinor = roundHalfUp(baseMinor / count);
+      depositMinor = reqDeposit ? cuotaMinor : 0;
+      remainingDepositMinor = initialTotalMinor - depositMinor;
+      monthlyMinor = cuotaMinor;
+      balanceMinor = remainingDepositMinor;
+    }
+
+    const lineItems: PricingLineItem[] = [
+      {
+        name: customConfig.itemName || 'Presupuesto Personalizado',
+        detail: detailText,
+        amount: baseMinor,
+        formatted: formatCurrency(baseMinor, 'USD'),
+      },
+    ];
+
+    return {
+      currency: 'USD',
+      exchangeRate: rate,
+      baseAmount: baseMinor,
+      extraAmount: 0,
+      initialTotal: initialTotalMinor,
+      deposit: depositMinor,
+      remainingDeposit: remainingDepositMinor,
+      subscriptionAmount: monthlyMinor,
+      hostingAmount: 0,
+      monthlyTotal: monthlyMinor,
+      balance: balanceMinor,
+      formatted: {
+        baseAmount: formatCurrency(baseMinor, 'USD'),
+        extraAmount: formatCurrency(0, 'USD'),
+        initialTotal: formatCurrency(initialTotalMinor, 'USD'),
+        deposit: formatCurrency(depositMinor, 'USD'),
+        remainingDeposit: formatCurrency(remainingDepositMinor, 'USD'),
+        subscriptionAmount: formatCurrency(monthlyMinor, 'USD'),
+        hostingAmount: formatCurrency(0, 'USD'),
+        monthlyTotal: formatCurrency(monthlyMinor, 'USD'),
+        balance: formatCurrency(balanceMinor, 'USD'),
+      },
+      lineItems,
+    };
+  }
+
+  // Validaciones modo estándar
   if (!Number.isInteger(extraPages) || extraPages < 0) {
     throw new PricingError('extraPages debe ser un entero mayor o igual a 0');
   }

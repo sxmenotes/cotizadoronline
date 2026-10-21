@@ -130,15 +130,20 @@ export const HistoryPage: React.FC = () => {
         if (currencyFilter !== 'all' && q.currency !== currencyFilter) {
           return false;
         }
-        // Búsqueda AND en cliente, proyecto, detalle de revisión, URL del prototipo y nombre del plan
+        // Búsqueda AND en cliente, proyecto, detalle de revisión, URL del prototipo, nombre del plan y detalle personalizado
         if (debouncedQuery.trim()) {
-          const planName = q.catalog.plans.find((p) => p.id === q.planId)?.name || '';
+          const planName = q.quoteMode === 'custom'
+            ? (q.customConfig?.itemName || 'Personalizado')
+            : (q.catalog.plans.find((p) => p.id === q.planId)?.name || '');
+          const customDetail = q.customConfig?.description || '';
+
           const match = matchesAllWords(debouncedQuery, [
             q.client,
             q.project,
             q.versionNote,
             q.prototypeUrl,
             planName,
+            customDetail,
           ]);
           if (!match) return false;
         }
@@ -165,6 +170,8 @@ export const HistoryPage: React.FC = () => {
               currency: a.currency,
               exchangeRate: a.exchangeRate,
               catalog: a.catalog,
+              quoteMode: a.quoteMode,
+              customConfig: a.customConfig,
             });
             const pB = calculatePricing({
               projectType: b.projectType,
@@ -175,6 +182,8 @@ export const HistoryPage: React.FC = () => {
               currency: b.currency,
               exchangeRate: b.exchangeRate,
               catalog: b.catalog,
+              quoteMode: b.quoteMode,
+              customConfig: b.customConfig,
             });
             return pB.initialTotal - pA.initialTotal;
           } catch {
@@ -524,7 +533,11 @@ export const HistoryPage: React.FC = () => {
                   currency: quote.currency,
                   exchangeRate: quote.exchangeRate,
                   catalog: quote.catalog,
+                  quoteMode: quote.quoteMode,
+                  customConfig: quote.customConfig,
                 });
+
+                const isCustom = quote.quoteMode === 'custom' && !!quote.customConfig;
 
                 return (
                   <Card
@@ -541,6 +554,12 @@ export const HistoryPage: React.FC = () => {
                         <span className="text-sm font-medium text-ink-muted truncate max-w-xs">
                           <Highlight text={quote.project} query={debouncedQuery} />
                         </span>
+
+                        {isCustom && (
+                          <Badge variant="brass" size="sm">
+                            Personalizado
+                          </Badge>
+                        )}
 
                         <Badge
                           variant={
@@ -571,18 +590,46 @@ export const HistoryPage: React.FC = () => {
                           <Calendar className="h-3.5 w-3.5" />
                           {quote.issuedOn}
                         </span>
-                        <span>
-                          Plan: <strong className="text-navy-900">{plan?.name || quote.planId}</strong>
-                        </span>
-                        {quote.extraPages > 0 && (
+                        {isCustom ? (
+                          <span>
+                            Concepto: <strong className="text-navy-900">{quote.customConfig!.itemName}</strong>
+                          </span>
+                        ) : (
+                          <span>
+                            Plan: <strong className="text-navy-900">{plan?.name || quote.planId}</strong>
+                          </span>
+                        )}
+                        {!isCustom && quote.extraPages > 0 && (
                           <span>+{quote.extraPages} pág. extra</span>
                         )}
                         <span>
                           Modalidad:{' '}
                           <strong className="text-navy-900">
-                            {quote.projectType === 'construccion' ? 'Construcción' : 'Venta código'}
+                            {isCustom
+                              ? quote.customConfig!.isOneTimePayment
+                                ? 'Pago único'
+                                : quote.customConfig!.paymentType === 'recurring'
+                                ? 'Recurrente'
+                                : 'Cuotas'
+                              : quote.projectType === 'construccion'
+                              ? 'Construcción'
+                              : 'Venta código'}
                           </strong>
                         </span>
+                        {isCustom && (
+                          <span>
+                            Abono:{' '}
+                            <strong className="text-navy-900">
+                              {quote.customConfig!.requiresDeposit
+                                ? `${quote.customConfig!.depositPercent ?? 50}%`
+                                : quote.customConfig!.noDepositTiming === 'upfront' ||
+                                  quote.customConfig!.depositOption === 'upfront' ||
+                                  quote.customConfig!.depositOption === 'full_upfront'
+                                ? '100% Anticipado'
+                                : '100% Contraentrega'}
+                            </strong>
+                          </span>
+                        )}
                         {quote.prototypeUrl && (
                           <a
                             href={quote.prototypeUrl}

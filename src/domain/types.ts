@@ -60,6 +60,27 @@ export interface Issuer {
   contact: string[];
 }
 
+export type QuoteMode = 'standard' | 'custom';
+export type CustomPaymentType = 'unique' | 'recurring' | 'installments';
+export type CustomDepositOption = 'percent' | 'delivery' | 'upfront' | 'none' | 'full_upfront';
+export type NoDepositTiming = 'delivery' | 'upfront';
+
+export interface CustomQuoteConfig {
+  itemName: string;
+  description?: string | undefined;
+  price: number;
+  isOneTimePayment: boolean;
+  paymentType?: CustomPaymentType | undefined;
+  billingPeriod?: 'monthly' | 'yearly' | undefined;
+  installmentsCount?: number | undefined;
+  requiresDeposit: boolean;
+  depositOption?: CustomDepositOption | undefined;
+  noDepositTiming?: NoDepositTiming | undefined;
+  depositPercent?: number | undefined;
+  deliveryDays?: number | undefined;
+  deliveryConditions?: string | undefined;
+}
+
 export interface Quote {
   id: string;
   createdAt: string;
@@ -83,6 +104,8 @@ export interface Quote {
   issuer: Issuer;
   linkedSkeletonId?: string | undefined;
   includeSkeletonInPdf?: boolean | undefined;
+  quoteMode?: QuoteMode | undefined;
+  customConfig?: CustomQuoteConfig | undefined;
 }
 
 export type SectionType =

@@ -290,9 +290,12 @@ export const SkeletonEditorPage: React.FC = () => {
     toast.success('Esqueleto guardado correctamente');
   };
 
+  const headingFont = current?.typography?.headingFont;
+  const bodyFont = current?.typography?.bodyFont;
+
   // Inyectar fuentes de Google Fonts dinámicamente para el DOM
   useEffect(() => {
-    const { headingFont, bodyFont } = current.typography;
+    if (!headingFont || !bodyFont) return;
     const fontId = `google-font-${headingFont}-${bodyFont}`.replace(/\s+/g, '-');
     if (!document.getElementById(fontId)) {
       const link = document.createElement('link');
@@ -301,15 +304,15 @@ export const SkeletonEditorPage: React.FC = () => {
       link.href = `https://fonts.googleapis.com/css2?family=${headingFont.replace(/\s+/g, '+')}:wght@400;600;700&family=${bodyFont.replace(/\s+/g, '+')}:wght@400;500;600&display=swap`;
       document.head.appendChild(link);
     }
-  }, [current.typography.headingFont, current.typography.bodyFont]);
+  }, [headingFont, bodyFont]);
 
   // Registrar fuentes para PDF de react-pdf (previene fallas en la exportación)
   useEffect(() => {
-    if (current) {
-      registerDynamicFont(current.typography.headingFont);
-      registerDynamicFont(current.typography.bodyFont);
+    if (headingFont && bodyFont) {
+      registerDynamicFont(headingFont);
+      registerDynamicFont(bodyFont);
     }
-  }, [current?.typography.headingFont, current?.typography.bodyFont]);
+  }, [headingFont, bodyFont]);
 
   // Medición no recursiva del contenedor para el ajuste de escala
   useEffect(() => {

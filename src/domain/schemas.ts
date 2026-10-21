@@ -103,6 +103,26 @@ export const IssuerSchema = z.object({
   contact: z.array(z.string()),
 });
 
+export const CustomPaymentTypeSchema = z.enum(['unique', 'recurring', 'installments']);
+export const CustomDepositOptionSchema = z.enum(['percent', 'delivery', 'upfront', 'none', 'full_upfront']);
+export const NoDepositTimingSchema = z.enum(['delivery', 'upfront']);
+
+export const CustomQuoteConfigSchema = z.object({
+  itemName: z.string().min(1, 'El nombre o detalle es obligatorio').max(120),
+  description: z.string().max(1000).optional(),
+  price: z.number().min(0, 'El valor no puede ser negativo'),
+  isOneTimePayment: z.boolean(),
+  paymentType: CustomPaymentTypeSchema.optional(),
+  billingPeriod: z.enum(['monthly', 'yearly']).optional(),
+  installmentsCount: z.number().int().min(2).max(24).optional(),
+  requiresDeposit: z.boolean(),
+  depositOption: CustomDepositOptionSchema.optional(),
+  noDepositTiming: NoDepositTimingSchema.optional(),
+  depositPercent: z.number().min(0).max(100).optional(),
+  deliveryDays: z.number().int().min(1).optional(),
+  deliveryConditions: z.string().max(500).optional(),
+});
+
 export const QuoteSchema = z.object({
   id: z.string().min(1),
   createdAt: z.string().datetime(),
@@ -126,6 +146,8 @@ export const QuoteSchema = z.object({
   issuer: IssuerSchema,
   linkedSkeletonId: z.string().optional(),
   includeSkeletonInPdf: z.boolean().optional(),
+  quoteMode: z.enum(['standard', 'custom']).optional(),
+  customConfig: CustomQuoteConfigSchema.optional(),
 });
 
 export const HexColorRegex = /^#(?:[0-9a-fA-F]{3}){1,2}$/;

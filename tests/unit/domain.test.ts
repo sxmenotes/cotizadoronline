@@ -244,4 +244,195 @@ describe('Migraciones y Esquemas Zod (Sección 5)', () => {
     const parsed = QuoteSchema.safeParse(validQuote);
     expect(parsed.success).toBe(true);
   });
+
+  describe('Presupuestos Personalizados (A Medida)', () => {
+    it('Caso Personalizado 1: Pago único con abono (50%) en CLP', () => {
+      const res = calculatePricing({
+        projectType: 'construccion',
+        planId: 'landing',
+        extraPages: 0,
+        subscriptionId: 'none',
+        hosting: false,
+        currency: 'CLP',
+        catalog: catalogSeed,
+        quoteMode: 'custom',
+        customConfig: {
+          itemName: 'Desarrollo de App Móvil iOS y Android',
+          description: 'Desarrollo completo en Flutter con pasarela de pagos',
+          price: 800000,
+          isOneTimePayment: true,
+          paymentType: 'unique',
+          requiresDeposit: true,
+          depositOption: 'percent',
+          depositPercent: 50,
+          deliveryDays: 20,
+        },
+      });
+
+      expect(res.baseAmount).toBe(800000);
+      expect(res.initialTotal).toBe(800000);
+      expect(res.deposit).toBe(400000);
+      expect(res.remainingDeposit).toBe(400000);
+      expect(res.monthlyTotal).toBe(0);
+      expect(res.balance).toBe(400000);
+      expect(res.lineItems[0]!.name).toBe('Desarrollo de App Móvil iOS y Android');
+    });
+
+    it('Caso Personalizado 2: Pago único sin abono (100% contraentrega)', () => {
+      const res = calculatePricing({
+        projectType: 'venta',
+        planId: 'landing',
+        extraPages: 0,
+        subscriptionId: 'none',
+        hosting: false,
+        currency: 'CLP',
+        catalog: catalogSeed,
+        quoteMode: 'custom',
+        customConfig: {
+          itemName: 'Diseño de Marca y Manual de Identidad',
+          price: 350000,
+          isOneTimePayment: true,
+          paymentType: 'unique',
+          requiresDeposit: false,
+          depositOption: 'none',
+          deliveryDays: 10,
+        },
+      });
+
+      expect(res.baseAmount).toBe(350000);
+      expect(res.initialTotal).toBe(350000);
+      expect(res.deposit).toBe(0);
+      expect(res.remainingDeposit).toBe(350000);
+      expect(res.balance).toBe(350000);
+    });
+
+    it('Caso Personalizado 3: Pago único sin abono pero 100% anticipado (CLP)', () => {
+      const res = calculatePricing({
+        projectType: 'venta',
+        planId: 'landing',
+        extraPages: 0,
+        subscriptionId: 'none',
+        hosting: false,
+        currency: 'CLP',
+        catalog: catalogSeed,
+        quoteMode: 'custom',
+        customConfig: {
+          itemName: 'Auditoría de Ciberseguridad y Pentesting',
+          price: 500000,
+          isOneTimePayment: true,
+          paymentType: 'unique',
+          requiresDeposit: false,
+          noDepositTiming: 'upfront',
+          depositOption: 'upfront',
+          deliveryDays: 5,
+        },
+      });
+
+      expect(res.baseAmount).toBe(500000);
+      expect(res.initialTotal).toBe(500000);
+      expect(res.deposit).toBe(500000); // 100% anticipado
+      expect(res.remainingDeposit).toBe(0);
+      expect(res.balance).toBe(0); // Sin saldo pendiente
+    });
+
+    it('Caso Personalizado 4: Pago único sin abono pero 100% anticipado (USD)', () => {
+      const res = calculatePricing({
+        projectType: 'venta',
+        planId: 'landing',
+        extraPages: 0,
+        subscriptionId: 'none',
+        hosting: false,
+        currency: 'USD',
+        exchangeRate: 1000,
+        catalog: catalogSeed,
+        quoteMode: 'custom',
+        customConfig: {
+          itemName: 'Setup Cloud Infrastructure AWS',
+          price: 400000, // 400 USD -> 40000 cents
+          isOneTimePayment: true,
+          paymentType: 'unique',
+          requiresDeposit: false,
+          noDepositTiming: 'upfront',
+          depositOption: 'upfront',
+          deliveryDays: 5,
+        },
+      });
+
+      expect(res.baseAmount).toBe(40000); // 400 USD
+      expect(res.initialTotal).toBe(40000);
+      expect(res.deposit).toBe(40000); // 100% anticipado en centavos
+      expect(res.remainingDeposit).toBe(0);
+      expect(res.balance).toBe(0);
+    });
+
+    it('Caso Personalizado 5: Recurrente mensual con abono inicial en USD', () => {
+      const res = calculatePricing({
+        projectType: 'construccion',
+        planId: 'landing',
+        extraPages: 0,
+        subscriptionId: 'none',
+        hosting: false,
+        currency: 'USD',
+        exchangeRate: 950,
+        catalog: catalogSeed,
+        quoteMode: 'custom',
+        customConfig: {
+          itemName: 'Consultoría y DevOps Continuo',
+          price: 475000, // 475000 / 950 = 500 USD (50000 cents)
+          isOneTimePayment: false,
+          paymentType: 'recurring',
+          billingPeriod: 'monthly',
+          requiresDeposit: true,
+          depositPercent: 50, // 250 USD deposit
+        },
+      });
+
+      expect(res.baseAmount).toBe(50000); // centavos
+      expect(res.deposit).toBe(25000); // 250 USD
+      expect(res.monthlyTotal).toBe(50000); // 500 USD/mes
+      expect(res.formatted.baseAmount).toContain('500');
+    });
+
+    it('Valida esquema Quote con configuración personalizada válida', () => {
+      const customQuote = {
+        id: 'quote-custom-1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        issuedOn: '2026-09-20',
+        client: 'Cliente Personalizado',
+        project: 'Integración Pasarela Webpay',
+        versionType: 'first' as const,
+        projectType: 'venta' as const,
+        planId: 'landing',
+        extraPages: 0,
+        subscriptionId: 'none',
+        hosting: false,
+        currency: 'CLP' as const,
+        catalog: catalogSeed,
+        terms: termsSeed,
+        issuer: {
+          name: 'SAMUEL VALENZUELA',
+          brandSubtitle: 'PROPUESTA COMERCIAL',
+          documentTag: 'PROPUESTA DE SERVICIOS',
+          serviceTagline: 'Tagline',
+          footerBrand: 'Footer',
+          bankDetails: ['Datos'],
+          contact: ['+569'],
+        },
+        quoteMode: 'custom' as const,
+        customConfig: {
+          itemName: 'Integración Webpay Plus API',
+          description: 'Implementación de checkout seguro',
+          price: 300000,
+          isOneTimePayment: true,
+          paymentType: 'unique' as const,
+          requiresDeposit: true,
+          depositPercent: 50,
+          deliveryDays: 7,
+        },
+      };
+      const parsed = QuoteSchema.safeParse(customQuote);
+      expect(parsed.success).toBe(true);
+    });
+  });
 });

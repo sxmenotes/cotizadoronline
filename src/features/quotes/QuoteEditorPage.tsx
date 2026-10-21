@@ -11,6 +11,7 @@ import {
   Calendar,
   ExternalLink,
   ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   Button,
@@ -28,7 +29,15 @@ import { useQuotesStore } from '../../store/quotesStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useSkeletonStore } from '../../store/skeletonStore';
 import { calculatePricing, PricingResult } from '../../domain/pricing';
-import type { Quote, QuoteVersionType, ProjectType, CurrencyCode } from '../../domain/types';
+import type {
+  Quote,
+  QuoteVersionType,
+  ProjectType,
+  CurrencyCode,
+  QuoteMode,
+  CustomQuoteConfig,
+  CustomPaymentType,
+} from '../../domain/types';
 import { PdfPreview } from '../../pdf/PdfPreview';
 import { QuoteDocument } from '../../pdf/QuoteDocument';
 import { pdf } from '@react-pdf/renderer';
@@ -127,6 +136,8 @@ export const QuoteEditorPage: React.FC = () => {
           catalog: draft.catalog || catalog,
           terms: draft.terms || terms,
           issuer: draft.issuer || issuer,
+          quoteMode: draft.quoteMode || 'standard',
+          customConfig: draft.customConfig || undefined,
         });
       } else {
         // Inicializar nuevo
@@ -151,6 +162,8 @@ export const QuoteEditorPage: React.FC = () => {
           catalog,
           terms,
           issuer,
+          quoteMode: 'standard',
+          customConfig: undefined,
         });
       }
     }
@@ -223,10 +236,30 @@ export const QuoteEditorPage: React.FC = () => {
       }
     }
 
+    if (currentQuote.quoteMode === 'custom') {
+      if (!currentQuote.customConfig?.itemName?.trim()) {
+        errors.customItemName = 'El nombre o detalle de lo que se cotiza es obligatorio';
+      } else if (currentQuote.customConfig.itemName.length > 120) {
+        errors.customItemName = 'Máximo 120 caracteres';
+      }
+
+      if (!currentQuote.customConfig?.price || currentQuote.customConfig.price <= 0) {
+        errors.customPrice = 'El valor monetario debe ser mayor a 0';
+      }
+    }
+
     return errors;
   }, [currentQuote]);
 
-  const isValid = Object.keys(validationErrors).length === 0 && Boolean(currentQuote?.client.trim()) && Boolean(currentQuote?.project.trim());
+  const isCustomValid =
+    currentQuote?.quoteMode !== 'custom' ||
+    (Boolean(currentQuote?.customConfig?.itemName?.trim()) && (currentQuote?.customConfig?.price ?? 0) > 0);
+
+  const isValid =
+    Object.keys(validationErrors).length === 0 &&
+    Boolean(currentQuote?.client.trim()) &&
+    Boolean(currentQuote?.project.trim()) &&
+    isCustomValid;
 
   // Cálculo en vivo de precios
   const pricingResult: PricingResult | null = useMemo(() => {
@@ -241,6 +274,8 @@ export const QuoteEditorPage: React.FC = () => {
         currency: currentQuote.currency,
         exchangeRate: currentQuote.exchangeRate,
         catalog: currentQuote.catalog,
+        quoteMode: currentQuote.quoteMode,
+        customConfig: currentQuote.customConfig,
       });
     } catch {
       return null;
@@ -261,6 +296,30 @@ export const QuoteEditorPage: React.FC = () => {
   // Manejadores de cambios
   const updateField = <K extends keyof Quote>(field: K, value: Quote[K]) => {
     setCurrentQuote((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const updateCustomConfig = (patch: Partial<CustomQuoteConfig>) => {
+    setCurrentQuote((prev) => {
+      if (!prev) return prev;
+      const existing = prev.customConfig || {
+        itemName: '',
+        description: '',
+        price: 150000,
+        isOneTimePayment: true,
+        paymentType: 'unique',
+        requiresDeposit: true,
+        depositOption: 'percent',
+        depositPercent: 50,
+        deliveryDays: prev.catalog?.deliveryBusinessDays || 10,
+      };
+      return {
+        ...prev,
+        customConfig: {
+          ...existing,
+          ...patch,
+        },
+      };
+    });
   };
 
   // Guardar presupuesto
@@ -617,33 +676,54 @@ export const QuoteEditorPage: React.FC = () => {
             </div>
           </Card>
 
-          {/* Tarjeta 2: Modalidad, Moneda y Plan */}
+          {/* Tarjeta 2: Modalidad, Moneda y Plan / Personalizado */}
           <Card className="p-5 sm:p-6 space-y-5">
-            <h2 className="font-serif text-base font-semibold text-navy-900 border-b border-hairline pb-2">
-              Alcance y Modalidad de Contratación
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-hairline pb-3 gap-2">
+              <div>
+                <h2 className="font-serif text-base font-semibold text-navy-900">
+                  Alcance y Modalidad de Contratación
+                </h2>
+                <p className="text-xs text-ink-muted">
+                  Selecciona un plan estándar de desarrollo web o crea una propuesta personalizada a medida.
+                </p>
+              </div>
+              <Badge variant={currentQuote.quoteMode === 'custom' ? 'brass' : 'navy'} size="sm">
+                {currentQuote.quoteMode === 'custom' ? '✨ Personalizado' : '🌐 Catálogo Web'}
+              </Badge>
+            </div>
 
-            {/* Tipo de proyecto */}
+            {/* Selector de Modo de Presupuesto */}
             <div>
               <span className="block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                Modalidad del Servicio
+                Tipo de Presupuesto
               </span>
               <SegmentedControl
                 options={[
-                  { value: 'construccion', label: 'Construcción y mantención' },
-                  { value: 'venta', label: 'Venta con código fuente' },
+                  { value: 'standard', label: 'Plan Web Estándar (Catálogo)' },
+                  { value: 'custom', label: '✨ Presupuesto Personalizado (A Medida)' },
                 ]}
-                value={currentQuote.projectType}
-                onChange={(val) => updateField('projectType', val as ProjectType)}
+                value={currentQuote.quoteMode || 'standard'}
+                onChange={(val) => {
+                  const mode = val as QuoteMode;
+                  updateField('quoteMode', mode);
+                  if (mode === 'custom' && !currentQuote.customConfig) {
+                    updateCustomConfig({
+                      itemName: '',
+                      description: '',
+                      price: 250000,
+                      isOneTimePayment: true,
+                      paymentType: 'unique',
+                      requiresDeposit: true,
+                      depositOption: 'percent',
+                      depositPercent: 50,
+                      deliveryDays: currentQuote.catalog.deliveryBusinessDays || 10,
+                    });
+                  }
+                }}
               />
-              <p className="mt-1.5 text-xs text-ink-muted">
-                {currentQuote.projectType === 'construccion'
-                  ? 'Construcción completa con opción de suscripción mensual de mantenimiento y hosting.'
-                  : 'Venta de la solución completa con entrega y cesión del código fuente sin suscripciones recurrentes.'}
-              </p>
             </div>
 
-            {/* Moneda y Tipo de Cambio */}
+            {/* Moneda y Tipo de Cambio (común a ambos modos) */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 border-t border-hairline/60">
               <div>
                 <span className="block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
@@ -675,50 +755,398 @@ export const QuoteEditorPage: React.FC = () => {
                 />
               ) : (
                 <div className="flex flex-col justify-center">
-                  <span className="text-xs font-medium text-ink-muted">Moneda local</span>
+                  <span className="text-xs font-medium text-ink-muted">Moneda de cálculo</span>
                   <span className="text-sm font-semibold text-navy-900">Pesos Chilenos (CLP)</span>
                 </div>
               )}
             </div>
 
-            {/* Selección de Plan y Páginas Extra */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 border-t border-hairline/60">
-              <Select
-                label="Plan del Catálogo"
-                options={currentQuote.catalog.plans.map((p) => {
-                  const rawPrice =
-                    currentQuote.projectType === 'venta' ? p.sale.price : p.build.price;
-                  const priceLabel =
-                    currentQuote.currency === 'USD' && currentQuote.exchangeRate && currentQuote.exchangeRate > 0
-                      ? `US$${(rawPrice / currentQuote.exchangeRate).toFixed(2)}`
-                      : `$${rawPrice.toLocaleString('es-CL')} CLP`;
-
-                  return {
-                    value: p.id,
-                    label: `${p.name} (${p.pages} pág.) · ${priceLabel}`,
-                  };
-                })}
-                value={currentQuote.planId}
-                onChange={(e) => updateField('planId', e.target.value)}
-              />
-
-              <div className="flex flex-col">
-                <NumberStepper
-                  label="Páginas adicionales"
-                  min={0}
-                  max={50}
-                  value={currentQuote.extraPages}
-                  onChange={(val) => updateField('extraPages', val)}
+            {/* MODO PERSONALIZADO */}
+            {currentQuote.quoteMode === 'custom' ? (
+              <div className="pt-2 border-t border-hairline/60 space-y-4">
+                {/* 1. Nombre / Detalle de lo que se cotiza */}
+                <Input
+                  label="Nombre o Detalle de lo que se cotiza *"
+                  placeholder="Ej: Desarrollo de App Móvil, Diseño de Marca, Integración API, Consultoría..."
+                  value={currentQuote.customConfig?.itemName || ''}
+                  onChange={(e) => updateCustomConfig({ itemName: e.target.value })}
+                  error={validationErrors.customItemName}
+                  helperText="Nombre principal que identifica el servicio o producto en la propuesta y PDF."
                 />
-                <p className="mt-1 text-xs text-ink-muted">
-                  +{currentQuote.catalog.extraPagePrice.toLocaleString('es-CL')} CLP c/u
-                </p>
+
+                {/* 2. Descripción o alcance */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="custom-scope-desc" className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                    Alcance o especificaciones del trabajo (opcional)
+                  </label>
+                  <textarea
+                    id="custom-scope-desc"
+                    rows={2}
+                    className="w-full rounded-lg border border-hairline bg-paper-1 px-3 py-2 text-sm text-ink focus:border-navy-500 focus:bg-white focus:outline-none transition-colors"
+                    placeholder="Detalla los entregables, características clave, funcionalidades o requerimientos incluidos..."
+                    value={currentQuote.customConfig?.description || ''}
+                    onChange={(e) => updateCustomConfig({ description: e.target.value })}
+                  />
+                </div>
+
+                {/* 3. Valor monetario */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label={`Valor Monetario (${currentQuote.currency}) *`}
+                    type="number"
+                    min="1"
+                    placeholder={currentQuote.currency === 'CLP' ? '250000' : '300'}
+                    value={
+                      currentQuote.currency === 'CLP'
+                        ? currentQuote.customConfig?.price || ''
+                        : Math.round(((currentQuote.customConfig?.price || 0) / (currentQuote.exchangeRate || 950)) * 100) / 100 || ''
+                    }
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      if (currentQuote.currency === 'CLP') {
+                        updateCustomConfig({ price: Math.max(0, Math.round(val)) });
+                      } else {
+                        updateCustomConfig({ price: Math.max(0, Math.round(val * (currentQuote.exchangeRate || 950))) });
+                      }
+                    }}
+                    error={validationErrors.customPrice}
+                    helperText={
+                      currentQuote.currency === 'CLP'
+                        ? currentQuote.exchangeRate && currentQuote.exchangeRate > 0
+                          ? `≈ US$${((currentQuote.customConfig?.price || 0) / currentQuote.exchangeRate).toFixed(2)} USD (Tasa ${currentQuote.exchangeRate})`
+                          : undefined
+                        : `≈ $${(currentQuote.customConfig?.price || 0).toLocaleString('es-CL')} CLP`
+                    }
+                  />
+
+                  {/* Plazo estimado */}
+                  <NumberStepper
+                    label="Plazo estimado (días hábiles)"
+                    min={1}
+                    max={180}
+                    value={currentQuote.customConfig?.deliveryDays || currentQuote.catalog.deliveryBusinessDays || 10}
+                    onChange={(val) => updateCustomConfig({ deliveryDays: val })}
+                  />
+                </div>
+
+                {/* 4. Modalidad de Pago: Pago Único vs Recurrente vs Cuotas */}
+                <div className="rounded-lg border border-hairline bg-paper-1 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-navy-900">
+                      Modalidad y Frecuencia de Pago
+                    </span>
+                    <Badge variant="navy" size="sm">
+                      {currentQuote.customConfig?.paymentType === 'recurring'
+                        ? 'Suscripción / Recurrente'
+                        : currentQuote.customConfig?.paymentType === 'installments'
+                        ? 'Por Cuotas'
+                        : 'Pago Único'}
+                    </Badge>
+                  </div>
+
+                  <SegmentedControl
+                    options={[
+                      { value: 'unique', label: 'Pago Único' },
+                      { value: 'recurring', label: 'Recurrente / Mensual' },
+                      { value: 'installments', label: 'En Cuotas' },
+                    ]}
+                    value={currentQuote.customConfig?.paymentType || (currentQuote.customConfig?.isOneTimePayment ? 'unique' : 'recurring')}
+                    onChange={(val) => {
+                      const pType = val as CustomPaymentType;
+                      updateCustomConfig({
+                        paymentType: pType,
+                        isOneTimePayment: pType === 'unique',
+                        billingPeriod: pType === 'recurring' ? 'monthly' : undefined,
+                        installmentsCount: pType === 'installments' ? (currentQuote.customConfig?.installmentsCount || 2) : undefined,
+                      });
+                    }}
+                  />
+
+                  {currentQuote.customConfig?.paymentType === 'recurring' && (
+                    <div className="pt-2 flex items-center justify-between text-xs text-ink-muted">
+                      <span>Frecuencia del cobro recurrente:</span>
+                      <div className="w-48">
+                        <SegmentedControl
+                          options={[
+                            { value: 'monthly', label: 'Mensual' },
+                            { value: 'yearly', label: 'Anual' },
+                          ]}
+                          value={currentQuote.customConfig?.billingPeriod || 'monthly'}
+                          onChange={(val) => updateCustomConfig({ billingPeriod: val as 'monthly' | 'yearly' })}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {currentQuote.customConfig?.paymentType === 'installments' && (
+                    <div className="pt-2 flex items-center justify-between">
+                      <NumberStepper
+                        label="Cantidad de Cuotas"
+                        min={2}
+                        max={12}
+                        value={currentQuote.customConfig?.installmentsCount || 2}
+                        onChange={(val) => updateCustomConfig({ installmentsCount: val })}
+                      />
+                      <div className="text-right text-xs text-ink-muted">
+                        <span className="block font-medium text-navy-900">
+                          {currentQuote.currency === 'USD'
+                            ? `US$${(((currentQuote.customConfig?.price || 0) / (currentQuote.exchangeRate || 950)) / (currentQuote.customConfig?.installmentsCount || 2)).toFixed(2)} / cuota`
+                            : `$${Math.round((currentQuote.customConfig?.price || 0) / (currentQuote.customConfig?.installmentsCount || 2)).toLocaleString('es-CL')} CLP / cuota`}
+                        </span>
+                        <span>{currentQuote.customConfig?.installmentsCount || 2} pagos iguales</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Condición de Abono */}
+                <div className="rounded-lg border border-hairline bg-paper-1 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-wider text-navy-900 block">
+                        Condición de Abono Inicial
+                      </span>
+                      <span className="text-[11px] text-ink-muted">
+                        ¿Requiere pago anticipado para iniciar o es 100% contraentrega?
+                      </span>
+                    </div>
+                    <Badge variant={currentQuote.customConfig?.requiresDeposit ? 'brass' : 'default'} size="sm">
+                      {currentQuote.customConfig?.requiresDeposit
+                        ? `Abono ${currentQuote.customConfig?.depositPercent ?? 50}%`
+                        : currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                          currentQuote.customConfig?.depositOption === 'upfront' ||
+                          currentQuote.customConfig?.depositOption === 'full_upfront'
+                        ? '100% Anticipado'
+                        : '100% Contraentrega'}
+                    </Badge>
+                  </div>
+
+                  <SegmentedControl
+                    options={[
+                      { value: 'deposit', label: 'Requiere Abono Inicial' },
+                      { value: 'no_deposit', label: 'Sin Abono (Pago 100%)' },
+                    ]}
+                    value={currentQuote.customConfig?.requiresDeposit ? 'deposit' : 'no_deposit'}
+                    onChange={(val) => {
+                      const req = val === 'deposit';
+                      const currentTiming = currentQuote.customConfig?.noDepositTiming || 'delivery';
+                      updateCustomConfig({
+                        requiresDeposit: req,
+                        depositOption: req ? 'percent' : currentTiming,
+                        depositPercent: req ? (currentQuote.customConfig?.depositPercent || 50) : 0,
+                        noDepositTiming: req ? undefined : currentTiming,
+                      });
+                    }}
+                  />
+
+                  {currentQuote.customConfig?.requiresDeposit ? (
+                    <div className="pt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-ink-muted">Porcentaje de abono inicial:</span>
+                        <div className="flex items-center gap-1">
+                          {[30, 50, 60, 70].map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => updateCustomConfig({ depositPercent: pct })}
+                              className={`px-2.5 py-1 text-xs rounded-md font-semibold transition-colors ${
+                                (currentQuote.customConfig?.depositPercent ?? 50) === pct
+                                  ? 'bg-navy-900 text-white'
+                                  : 'bg-white border border-hairline text-ink-muted hover:text-navy-900'
+                              }`}
+                            >
+                              {pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Desglose en vivo de abono vs saldo */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-hairline/60 text-xs">
+                        <div className="rounded-md bg-white p-2.5 border border-hairline">
+                          <span className="block text-[11px] text-ink-muted">
+                            Abono para iniciar ({currentQuote.customConfig?.depositPercent ?? 50}%):
+                          </span>
+                          <span className="font-bold text-navy-900 text-sm">
+                            {pricingResult.formatted.deposit}
+                          </span>
+                        </div>
+                        <div className="rounded-md bg-white p-2.5 border border-hairline">
+                          <span className="block text-[11px] text-ink-muted">Saldo contraentrega:</span>
+                          <span className="font-bold text-navy-900 text-sm">
+                            {pricingResult.formatted.balance}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* CUANDO ES SIN ABONO (PAGO 100%) */
+                    <div className="pt-2 space-y-3">
+                      <div>
+                        <span className="text-xs font-semibold text-navy-900 block mb-1.5">
+                          Momento del pago 100%:
+                        </span>
+                        <SegmentedControl
+                          options={[
+                            { value: 'delivery', label: '🚚 100% Contraentrega' },
+                            { value: 'upfront', label: '💳 100% Pago Anticipado' },
+                          ]}
+                          value={
+                            currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                            currentQuote.customConfig?.depositOption === 'upfront' ||
+                            currentQuote.customConfig?.depositOption === 'full_upfront'
+                              ? 'upfront'
+                              : 'delivery'
+                          }
+                          onChange={(val) => {
+                            const timing = val as 'delivery' | 'upfront';
+                            updateCustomConfig({
+                              noDepositTiming: timing,
+                              depositOption: timing,
+                            });
+                          }}
+                        />
+                      </div>
+
+                      {/* Desglose en vivo para pago 100% */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-hairline/60 text-xs">
+                        <div className="rounded-md bg-white p-2.5 border border-hairline">
+                          <span className="block text-[11px] text-ink-muted">
+                            {currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                            currentQuote.customConfig?.depositOption === 'upfront' ||
+                            currentQuote.customConfig?.depositOption === 'full_upfront'
+                              ? 'Pago anticipado (100%):'
+                              : 'Abono inicial requerido:'}
+                          </span>
+                          <span className="font-bold text-navy-900 text-sm">
+                            {pricingResult.formatted.deposit}
+                          </span>
+                        </div>
+                        <div className="rounded-md bg-white p-2.5 border border-hairline">
+                          <span className="block text-[11px] text-ink-muted">
+                            {currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                            currentQuote.customConfig?.depositOption === 'upfront' ||
+                            currentQuote.customConfig?.depositOption === 'full_upfront'
+                              ? 'Saldo al finalizar:'
+                              : 'Total a pagar contraentrega:'}
+                          </span>
+                          <span className="font-bold text-navy-900 text-sm">
+                            {pricingResult.formatted.balance}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 p-2.5 rounded-md bg-white border border-hairline text-xs text-ink-muted">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span>
+                          {currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                          currentQuote.customConfig?.depositOption === 'upfront' ||
+                          currentQuote.customConfig?.depositOption === 'full_upfront'
+                            ? `Pago 100% anticipado: El cliente abona el valor completo (${pricingResult.formatted.initialTotal}) por adelantado al inicio. No quedan saldos pendientes al entregar.`
+                            : `Pago 100% contraentrega: Sin anticipo. El valor completo (${pricingResult.formatted.initialTotal}) se cancelará una vez finalizada y entregada la solución acordada.`}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. Condiciones especiales opcionales */}
+                <Input
+                  label="Condiciones especiales de entrega o pago (opcional)"
+                  placeholder="Ej: Traspaso de accesos tras validación, soporte por 30 días posteriores..."
+                  value={currentQuote.customConfig?.deliveryConditions || ''}
+                  onChange={(e) => updateCustomConfig({ deliveryConditions: e.target.value })}
+                  helperText="Reemplazará las cláusulas por defecto de plazos en el documento PDF."
+                />
               </div>
-            </div>
+            ) : (
+              /* MODO ESTÁNDAR (Planes Web de Catálogo) */
+              <div className="space-y-5">
+                {/* Tipo de proyecto */}
+                <div>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
+                    Modalidad del Servicio
+                  </span>
+                  <SegmentedControl
+                    options={[
+                      { value: 'construccion', label: 'Construcción y mantención' },
+                      { value: 'venta', label: 'Venta con código fuente' },
+                    ]}
+                    value={currentQuote.projectType}
+                    onChange={(val) => updateField('projectType', val as ProjectType)}
+                  />
+                  <p className="mt-1.5 text-xs text-ink-muted">
+                    {currentQuote.projectType === 'construccion'
+                      ? 'Construcción completa con opción de suscripción mensual de mantenimiento y hosting.'
+                      : 'Venta de la solución completa con entrega y cesión del código fuente sin suscripciones recurrentes.'}
+                  </p>
+                </div>
+
+                {/* Selección de Plan y Páginas Extra */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 border-t border-hairline/60">
+                  <Select
+                    label="Plan del Catálogo"
+                    options={[
+                      ...currentQuote.catalog.plans.map((p) => {
+                        const rawPrice =
+                          currentQuote.projectType === 'venta' ? p.sale.price : p.build.price;
+                        const priceLabel =
+                          currentQuote.currency === 'USD' && currentQuote.exchangeRate && currentQuote.exchangeRate > 0
+                            ? `US$${(rawPrice / currentQuote.exchangeRate).toFixed(2)}`
+                            : `$${rawPrice.toLocaleString('es-CL')} CLP`;
+
+                        return {
+                          value: p.id,
+                          label: `${p.name} (${p.pages} pág.) · ${priceLabel}`,
+                        };
+                      }),
+                      {
+                        value: '__custom__',
+                        label: '✨ Crear Presupuesto Personalizado...',
+                      },
+                    ]}
+                    value={currentQuote.planId}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        updateField('quoteMode', 'custom');
+                        if (!currentQuote.customConfig) {
+                          updateCustomConfig({
+                            itemName: '',
+                            description: '',
+                            price: 250000,
+                            isOneTimePayment: true,
+                            paymentType: 'unique',
+                            requiresDeposit: true,
+                            depositOption: 'percent',
+                            depositPercent: 50,
+                            deliveryDays: currentQuote.catalog.deliveryBusinessDays || 10,
+                          });
+                        }
+                      } else {
+                        updateField('planId', e.target.value);
+                      }
+                    }}
+                  />
+
+                  <div className="flex flex-col">
+                    <NumberStepper
+                      label="Páginas adicionales"
+                      min={0}
+                      max={50}
+                      value={currentQuote.extraPages}
+                      onChange={(val) => updateField('extraPages', val)}
+                    />
+                    <p className="mt-1 text-xs text-ink-muted">
+                      +{currentQuote.catalog.extraPagePrice.toLocaleString('es-CL')} CLP c/u
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </Card>
 
-          {/* Tarjeta 3: Servicios Recurrentes (solo construcción) */}
-          {currentQuote.projectType === 'construccion' && (
+          {/* Tarjeta 3: Servicios Recurrentes (solo construcción en modo catálogo) */}
+          {currentQuote.quoteMode !== 'custom' && currentQuote.projectType === 'construccion' && (
             <Card className="p-5 sm:p-6 space-y-4">
               <h2 className="font-serif text-base font-semibold text-navy-900 border-b border-hairline pb-2 flex items-center justify-between">
                 <span>Servicios Recurrentes Mensuales</span>
@@ -783,38 +1211,104 @@ export const QuoteEditorPage: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="flex flex-col">
-                <span className="text-xs text-white/70">Total Inicial</span>
+                <span className="text-xs text-white/70">
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.isOneTimePayment
+                      ? 'Total Inversión'
+                      : 'Total Inicial'
+                    : 'Total Inicial'}
+                </span>
                 <span className="text-lg sm:text-xl font-bold font-sans text-white">
                   {pricingResult.formatted.initialTotal}
                 </span>
-                <span className="text-[11px] text-white/50">Plan + Páginas extra</span>
+                <span className="text-[11px] text-white/50 truncate max-w-[140px]">
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.itemName || 'Servicio a medida'
+                    : 'Plan + Páginas extra'}
+                </span>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-xs text-white/70">Abono Inicial (50%)</span>
+                <span className="text-xs text-white/70">
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.requiresDeposit
+                      ? `Abono Inicial (${currentQuote.customConfig?.depositPercent ?? 50}%)`
+                      : currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                        currentQuote.customConfig?.depositOption === 'upfront' ||
+                        currentQuote.customConfig?.depositOption === 'full_upfront'
+                      ? 'Pago Anticipado (100%)'
+                      : 'Abono Inicial (0%)'
+                    : `Abono Inicial (${currentQuote.catalog.depositPercent}%)`}
+                </span>
                 <span className="text-lg sm:text-xl font-bold font-sans text-brass">
                   {pricingResult.formatted.deposit}
                 </span>
-                <span className="text-[11px] text-white/50">Para inicio de obras</span>
+                <span className="text-[11px] text-white/50">
+                  {currentQuote.quoteMode === 'custom' && !currentQuote.customConfig?.requiresDeposit
+                    ? currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                      currentQuote.customConfig?.depositOption === 'upfront' ||
+                      currentQuote.customConfig?.depositOption === 'full_upfront'
+                      ? '100% por adelantado'
+                      : 'Sin anticipo'
+                    : 'Para inicio de obras'}
+                </span>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-xs text-white/70">Saldo Contraentrega</span>
+                <span className="text-xs text-white/70">
+                  {currentQuote.quoteMode === 'custom' && !currentQuote.customConfig?.requiresDeposit
+                    ? currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                      currentQuote.customConfig?.depositOption === 'upfront' ||
+                      currentQuote.customConfig?.depositOption === 'full_upfront'
+                      ? 'Saldo al Finalizar'
+                      : 'Total Contraentrega'
+                    : 'Saldo Contraentrega'}
+                </span>
                 <span className="text-lg sm:text-xl font-bold font-sans text-white">
                   {pricingResult.formatted.balance}
                 </span>
-                <span className="text-[11px] text-white/50">50% + 1.er mes (si aplica)</span>
+                <span className="text-[11px] text-white/50">
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.requiresDeposit
+                      ? 'Al entregar solución'
+                      : currentQuote.customConfig?.noDepositTiming === 'upfront' ||
+                        currentQuote.customConfig?.depositOption === 'upfront' ||
+                        currentQuote.customConfig?.depositOption === 'full_upfront'
+                      ? 'Sin saldo pendiente'
+                      : '100% contraentrega'
+                    : '50% + 1.er mes (si aplica)'}
+                </span>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-xs text-white/70">Mensualidad</span>
+                <span className="text-xs text-white/70">
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.paymentType === 'recurring'
+                      ? 'Tarifa Recurrente'
+                      : currentQuote.customConfig?.paymentType === 'installments'
+                      ? 'Valor Cuota'
+                      : 'Cobro Periódico'
+                    : 'Mensualidad'}
+                </span>
                 <span className="text-lg sm:text-xl font-bold font-sans text-white/90">
-                  {currentQuote.projectType === 'construccion'
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.isOneTimePayment
+                      ? '—'
+                      : pricingResult.formatted.monthlyTotal
+                    : currentQuote.projectType === 'construccion'
                     ? pricingResult.formatted.monthlyTotal
                     : '—'}
                 </span>
                 <span className="text-[11px] text-white/50">
-                  {currentQuote.projectType === 'construccion' ? 'Mantención + Hosting' : 'Venta única'}
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.isOneTimePayment
+                      ? 'Pago único'
+                      : currentQuote.customConfig?.paymentType === 'recurring'
+                      ? (currentQuote.customConfig.billingPeriod === 'yearly' ? 'Cobro anual' : 'Cobro mensual')
+                      : `${currentQuote.customConfig?.installmentsCount || 2} cuotas`
+                    : currentQuote.projectType === 'construccion'
+                    ? 'Mantención + Hosting'
+                    : 'Venta única'}
                 </span>
               </div>
             </div>
@@ -822,7 +1316,13 @@ export const QuoteEditorPage: React.FC = () => {
             {currentQuote.currency === 'USD' && currentQuote.exchangeRate && (
               <div className="pt-2 border-t border-white/10 text-xs text-white/60 flex items-center justify-between">
                 <span>Tipo de cambio aplicado: 1 USD = ${currentQuote.exchangeRate.toLocaleString('es-CL')} CLP</span>
-                <span>Plazo: {currentQuote.catalog.deliveryBusinessDays} días hábiles</span>
+                <span>
+                  Plazo:{' '}
+                  {currentQuote.quoteMode === 'custom'
+                    ? currentQuote.customConfig?.deliveryDays || currentQuote.catalog.deliveryBusinessDays
+                    : currentQuote.catalog.deliveryBusinessDays}{' '}
+                  días hábiles
+                </span>
               </div>
             )}
           </Card>
