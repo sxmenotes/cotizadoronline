@@ -104,6 +104,8 @@ export interface Quote {
   issuer: Issuer;
   linkedSkeletonId?: string | undefined;
   includeSkeletonInPdf?: boolean | undefined;
+  /** Incluir el anexo "Presentación de servicios" en el PDF. Si no se define: sí para plan estándar, no para personalizado. */
+  includeServicesInPdf?: boolean | undefined;
   quoteMode?: QuoteMode | undefined;
   customConfig?: CustomQuoteConfig | undefined;
 }

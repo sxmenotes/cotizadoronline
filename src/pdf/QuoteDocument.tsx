@@ -1,18 +1,14 @@
 import React from 'react';
-import {
-  Document,
-  Page,
-  View,
-  Image,
-  Link,
-} from '@react-pdf/renderer';
+import { Document, Page, View, Image, Link } from '@react-pdf/renderer';
 import { PdfText as Text } from './PdfText';
 import type { Quote, SkeletonDesign } from '../domain/types';
 import { calculatePricing } from '../domain/pricing';
-import { resolveTokens } from '../domain/tokens';
+import { buildPaymentPlan, shouldIncludeServices, type PaymentStep } from '../domain/paymentSchedule';
 import { registerPdfFonts } from './fonts';
 import { pdfStyles, pdfColors } from './styles';
-import { ISOLOGO_WHITE_BASE64, ISOLOGO_BLACK_BASE64 } from './brandLogos';
+import { ISOLOGO_WHITE_BASE64 } from './brandLogos';
+import { InteriorHeader, InteriorFooter } from './PdfChrome';
+import { ServicesPresentation } from './ServicesPresentation';
 import { SkeletonPages } from '../features/skeleton/wireframe/SkeletonDocument';
 
 // Registrar fuentes locales
@@ -22,6 +18,61 @@ export interface QuoteDocumentProps {
   quote: Quote;
   skeletonDesign?: SkeletonDesign | undefined;
 }
+
+interface DetailRow {
+  concept: string;
+  detail?: string | undefined;
+  amount: string;
+}
+
+/** Tabla de conceptos con fila de total */
+const DetailTable: React.FC<{
+  amountHeader: string;
+  rows: DetailRow[];
+  totalLabel: string;
+  totalAmount: string;
+}> = ({ amountHeader, rows, totalLabel, totalAmount }) => (
+  <View style={[pdfStyles.table, { marginBottom: 6 }]} wrap={false}>
+    <View style={pdfStyles.tableHeaderRow}>
+      <Text style={[pdfStyles.tableHeaderCell, { width: '75%' }]}>Concepto</Text>
+      <Text style={[pdfStyles.tableHeaderCell, { width: '25%', textAlign: 'right' }]}>{amountHeader}</Text>
+    </View>
+    {rows.map((r, i) => (
+      <View key={i} style={pdfStyles.tableRow}>
+        <View style={{ width: '75%', paddingRight: 8 }}>
+          <Text style={[pdfStyles.tableCell, { fontWeight: 700, color: pdfColors.navy900 }]}>{r.concept}</Text>
+          {r.detail ? (
+            <Text style={[pdfStyles.tableCell, { color: pdfColors.inkMuted, fontSize: 7.8, marginTop: 1.5 }]}>
+              {r.detail}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={[pdfStyles.tableCellRight, { width: '25%' }]}>{r.amount}</Text>
+      </View>
+    ))}
+    <View style={pdfStyles.tableTotalRow}>
+      <Text style={[pdfStyles.tableCell, { width: '75%', fontWeight: 700, color: pdfColors.navy900 }]}>
+        {totalLabel}
+      </Text>
+      <Text style={[pdfStyles.tableCellRight, { width: '25%', fontWeight: 700, fontSize: 9.5 }]}>{totalAmount}</Text>
+    </View>
+  </View>
+);
+
+/** Tarjeta de un pago dentro del esquema de pagos */
+const StepCard: React.FC<{ step: PaymentStep }> = ({ step }) => (
+  <View style={[pdfStyles.stepCard, step.isDeposit ? pdfStyles.stepCardDeposit : {}]}>
+    {step.percentLabel ? (
+      <Text style={[pdfStyles.stepBadge, step.isDeposit ? pdfStyles.stepBadgeDeposit : {}]}>
+        {step.percentLabel}
+      </Text>
+    ) : null}
+    <Text style={pdfStyles.stepTitle}>{step.title}</Text>
+    <Text style={pdfStyles.stepAmount}>{step.amount}</Text>
+    <Text style={pdfStyles.stepWhen}>{step.when}</Text>
+    {step.breakdown ? <Text style={pdfStyles.stepBreakdown}>{step.breakdown}</Text> : null}
+  </View>
+);
 
 export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDesign }) => {
   const {
@@ -38,7 +89,6 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
     currency,
     exchangeRate,
     catalog,
-    terms,
     issuer,
     issuedOn,
   } = quote;
@@ -57,24 +107,18 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
     customConfig: quote.customConfig,
   });
 
-  const isCustom = quote.quoteMode === 'custom' && !!quote.customConfig;
+  const paymentPlan = buildPaymentPlan(quote, pricing);
+  const includeServices = shouldIncludeServices(quote);
 
-  const tokenContext = {
-    catalog,
-    currency,
-    exchangeRate,
-  };
+  const custom = quote.quoteMode === 'custom' ? quote.customConfig : undefined;
+  const isCustom = !!custom;
 
   const plan = catalog.plans.find((p) => p.id === planId) || catalog.plans[0]!;
   const subscription = catalog.subscriptions.find((s) => s.id === subscriptionId);
 
   // Formato de fecha larga en español
   const dateParts = issuedOn.split('-');
-  const dateObj = new Date(
-    Number(dateParts[0]),
-    Number(dateParts[1]) - 1,
-    Number(dateParts[2])
-  );
+  const dateObj = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
   const formattedDate = dateObj.toLocaleDateString('es-CL', {
     day: 'numeric',
     month: 'long',
@@ -88,6 +132,91 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
       ? `Revisión: ${versionNote || 'Detalle'}`
       : 'Cotización final';
 
+  const modalityText = isCustom
+    ? 'Presupuesto Personalizado (A medida)'
+    : projectType === 'construccion'
+    ? 'Construcción y mantención'
+    : 'Venta con código fuente';
+
+  // ---------------------------------------------------------------------------
+  // Filas de detalle ("¿Qué incluye?")
+  // ---------------------------------------------------------------------------
+  const detailRows: DetailRow[] = [];
+  let detailTotalLabel = 'Total';
+  let monthlyRows: DetailRow[] = [];
+
+  if (custom) {
+    const isRecurring = !custom.isOneTimePayment && custom.paymentType === 'recurring';
+    detailRows.push({
+      concept: custom.itemName || 'Presupuesto Personalizado',
+      detail: custom.description || undefined,
+      amount: isRecurring ? pricing.formatted.monthlyTotal : pricing.formatted.baseAmount,
+    });
+    detailTotalLabel = isRecurring
+      ? `Total ${custom.billingPeriod === 'yearly' ? 'anual' : 'mensual'}`
+      : 'Total del servicio';
+  } else {
+    detailRows.push({
+      concept: plan.name,
+      detail: projectType === 'construccion' ? plan.build.desc : plan.sale.desc,
+      amount: pricing.formatted.baseAmount,
+    });
+    if (extraPages > 0) {
+      detailRows.push({
+        concept: 'Páginas adicionales',
+        detail: `${extraPages} ${extraPages === 1 ? 'página extra' : 'páginas extra'}`,
+        amount: pricing.formatted.extraAmount,
+      });
+    }
+    detailTotalLabel = 'Total del desarrollo (pago único)';
+
+    if (projectType === 'construccion' && pricing.monthlyTotal > 0) {
+      monthlyRows = [];
+      if (subscription && pricing.subscriptionAmount > 0) {
+        monthlyRows.push({
+          concept: `Mantención Plan ${subscription.name}`,
+          detail: subscription.desc,
+          amount: pricing.formatted.subscriptionAmount,
+        });
+      }
+      if (hosting && pricing.hostingAmount > 0) {
+        monthlyRows.push({
+          concept: 'Hosting (alojamiento web)',
+          detail: 'Servidor donde queda publicado tu sitio',
+          amount: pricing.formatted.hostingAmount,
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plazos y entrega
+  // ---------------------------------------------------------------------------
+  let deliveryText: string;
+  if (custom) {
+    const days = custom.deliveryDays || catalog.deliveryBusinessDays;
+    const upfront =
+      !custom.requiresDeposit &&
+      (custom.noDepositTiming === 'upfront' ||
+        custom.depositOption === 'upfront' ||
+        custom.depositOption === 'full_upfront');
+    deliveryText = custom.deliveryConditions
+      ? custom.deliveryConditions
+      : custom.requiresDeposit
+      ? `Plazo estimado de ${days} días hábiles desde la confirmación del abono inicial y la recepción de los antecedentes solicitados. El saldo se paga contra entrega, con el trabajo aprobado.`
+      : upfront
+      ? `Plazo estimado de ${days} días hábiles desde la acreditación del pago total y la recepción de los antecedentes requeridos. No quedan pagos pendientes al momento de la entrega.`
+      : `Plazo estimado de ${days} días hábiles. El pago total se realiza contra entrega, una vez finalizado y aprobado el trabajo.`;
+  } else {
+    deliveryText =
+      projectType === 'construccion'
+        ? `Plazo promedio de ${catalog.deliveryBusinessDays} días hábiles desde la recepción del abono inicial y los contenidos necesarios. El sitio se publica una vez pagado el saldo junto al primer mes de mantención.`
+        : `Plazo estimado de ${catalog.deliveryBusinessDays} días hábiles. El código fuente se entrega (repositorio GitHub o archivo comprimido) una vez pagado el saldo restante.`;
+  }
+
+  const steps = paymentPlan.steps;
+  const useCards = steps.length <= 3;
+
   return (
     <Document
       title={`Presupuesto_${client}_${project}`}
@@ -100,7 +229,6 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
           PÁGINA 1: PORTADA EDITORIAL (Fondo Azul Marino)
           ========================================================================= */}
       <Page size="A4" style={pdfStyles.coverPage}>
-        {/* Cabecera Portada */}
         <View style={pdfStyles.coverHeader}>
           <Image src={ISOLOGO_WHITE_BASE64} style={pdfStyles.coverLogo} />
           <View>
@@ -109,7 +237,6 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
           </View>
         </View>
 
-        {/* Bloque Central Portada */}
         <View style={pdfStyles.coverMain}>
           <Text style={pdfStyles.coverTitle}>Propuesta de</Text>
           <Text style={pdfStyles.coverTitle}>{isCustom ? 'Servicios' : 'Servicios Web'}</Text>
@@ -122,7 +249,6 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
           </View>
         </View>
 
-        {/* Pie de Portada */}
         <View style={pdfStyles.coverFooter}>
           <Text>{formattedDate}</Text>
           <Text>{issuer.footerBrand}</Text>
@@ -130,521 +256,162 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
       </Page>
 
       {/* =========================================================================
-          PÁGINA 2: DETALLE DE COTIZACIÓN & RESUMEN FINANCIERO
+          PÁGINA 2: RESUMEN DE LA COTIZACIÓN
           ========================================================================= */}
       <Page size="A4" style={pdfStyles.interiorPage}>
-          {/* Cabecera Fija */}
-          <View style={pdfStyles.fixedHeader} fixed>
-            <View style={pdfStyles.headerBrand}>
-              <Image src={ISOLOGO_BLACK_BASE64} style={pdfStyles.headerLogo} />
-              <Text style={pdfStyles.headerBrandTitle}>{issuer.name}</Text>
-            </View>
-            <Text style={pdfStyles.headerDocTag}>{issuer.brandSubtitle}</Text>
-          </View>
+        <InteriorHeader brand={issuer.name} tag={issuer.brandSubtitle} />
 
-        {/* Título de Página */}
-        <Text style={pdfStyles.pageTitle}>Detalle de la cotización</Text>
+        <Text style={pdfStyles.eyebrow}>Tu cotización</Text>
+        <Text style={pdfStyles.pageTitle}>Resumen de la cotización</Text>
 
         {/* Metadatos */}
-        <View style={pdfStyles.metaGrid}>
-          <View style={pdfStyles.metaItem}>
-            <Text>
-              <Text style={pdfStyles.metaLabel}>Cliente: </Text>
-              {client}
-            </Text>
-          </View>
-          <View style={pdfStyles.metaItem}>
-            <Text>
-              <Text style={pdfStyles.metaLabel}>Proyecto: </Text>
-              {project}
-            </Text>
-          </View>
-          <View style={pdfStyles.metaItem}>
-            <Text>
-              <Text style={pdfStyles.metaLabel}>Modalidad: </Text>
-              {isCustom
-                ? 'Presupuesto Personalizado (A medida)'
-                : projectType === 'construccion'
-                ? 'Construcción y mantención'
-                : 'Venta con código fuente'}
-            </Text>
-          </View>
-          <View style={pdfStyles.metaItem}>
-            <Text>
-              <Text style={pdfStyles.metaLabel}>Versión: </Text>
-              {versionText}
-            </Text>
-          </View>
-          <View style={pdfStyles.metaItem}>
-            <Text>
-              <Text style={pdfStyles.metaLabel}>Fecha de emisión: </Text>
-              {formattedDate}
-            </Text>
-          </View>
-          <View style={pdfStyles.metaItem}>
-            <Text>
-              <Text style={pdfStyles.metaLabel}>Prototipo: </Text>
-              {prototypeUrl ? (
-                <Link src={prototypeUrl} style={{ color: pdfColors.navy700 }}>
-                  Ver prototipo interactivo
-                </Link>
-              ) : (
-                'No proporciona / No aplica'
-              )}
-            </Text>
-          </View>
-        </View>
-
-        {/* Tabla 1: Inversión / Detalle */}
-        {isCustom ? (
-          <>
-            <Text style={pdfStyles.sectionTitle}>1. Inversión y alcance del servicio</Text>
-            <View style={pdfStyles.table} wrap={false}>
-              <View style={pdfStyles.tableHeaderRow}>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>CONCEPTO</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>DETALLE Y ALCANCE</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
-                  MONTO ({currency})
-                </Text>
-              </View>
-
-              <View style={pdfStyles.tableRow}>
-                <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                  {quote.customConfig!.itemName || 'Presupuesto Personalizado'}
-                </Text>
-                <View style={[pdfStyles.tableCell, { width: '40%' }]}>
-                  {quote.customConfig!.description ? (
-                    <Text style={{ color: pdfColors.ink, marginBottom: 2 }}>
-                      {quote.customConfig!.description}
-                    </Text>
-                  ) : null}
-                  <Text style={{ color: pdfColors.inkMuted, fontSize: 8 }}>
-                    {quote.customConfig!.isOneTimePayment
-                      ? 'Modalidad: Pago único'
-                      : quote.customConfig!.paymentType === 'recurring'
-                      ? `Modalidad: Servicio recurrente (${quote.customConfig!.billingPeriod === 'yearly' ? 'Anual' : 'Mensual'})`
-                      : `Modalidad: Pago en ${quote.customConfig!.installmentsCount || 2} cuotas`}
-                    {quote.customConfig!.requiresDeposit
-                      ? ` · Abono inicial ${quote.customConfig!.depositPercent ?? 50}%`
-                      : quote.customConfig!.noDepositTiming === 'upfront' ||
-                        quote.customConfig!.depositOption === 'upfront' ||
-                        quote.customConfig!.depositOption === 'full_upfront'
-                      ? ' · Pago 100% anticipado'
-                      : ' · Pago 100% contraentrega'}
-                  </Text>
-                </View>
-                <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                  {pricing.formatted.baseAmount}
-                </Text>
-              </View>
+        <View style={pdfStyles.metaStrip}>
+          {[
+            ['Cliente', client],
+            ['Proyecto', project],
+            ['Fecha de emisión', formattedDate],
+            ['Modalidad', modalityText],
+            ['Versión', versionText],
+          ].map(([label, value]) => (
+            <View key={label} style={pdfStyles.metaCell}>
+              <Text style={pdfStyles.metaCellLabel}>{label}</Text>
+              <Text style={pdfStyles.metaCellValue}>{value}</Text>
             </View>
-
-            {/* Si no es pago único y es recurrente, mostrar fila de recurrencia */}
-            {!quote.customConfig!.isOneTimePayment && quote.customConfig!.paymentType === 'recurring' && (
-              <>
-                <Text style={pdfStyles.sectionTitle}>2. Tarifa y cobro periódico</Text>
-                <View style={pdfStyles.table} wrap={false}>
-                  <View style={pdfStyles.tableHeaderRow}>
-                    <Text style={[pdfStyles.tableHeaderCell, { width: '50%' }]}>SERVICIO</Text>
-                    <Text style={[pdfStyles.tableHeaderCell, { width: '25%' }]}>PERIODICIDAD</Text>
-                    <Text style={[pdfStyles.tableHeaderCell, { width: '25%', textAlign: 'right' }]}>
-                      MONTO ({currency})
-                    </Text>
-                  </View>
-                  <View style={pdfStyles.tableRow}>
-                    <Text style={[pdfStyles.tableCell, { width: '50%', fontWeight: 700 }]}>
-                      {quote.customConfig!.itemName}
-                    </Text>
-                    <Text style={[pdfStyles.tableCell, { width: '25%', color: pdfColors.inkMuted }]}>
-                      {quote.customConfig!.billingPeriod === 'yearly' ? 'Cobro anual' : 'Cobro mensual'}
-                    </Text>
-                    <Text style={[pdfStyles.tableCellRight, { width: '25%' }]}>
-                      {pricing.formatted.monthlyTotal}
-                    </Text>
-                  </View>
-                </View>
-              </>
-            )}
-
-            {/* Caja de Resumen Financiero Personalizado */}
-            <View style={pdfStyles.summaryBox} wrap={false}>
-              <View style={pdfStyles.summaryRow}>
-                <Text style={{ color: pdfColors.inkMuted }}>
-                  {quote.customConfig!.isOneTimePayment ? 'Total inversión del servicio:' : 'Total inicial:'}
-                </Text>
-                <Text style={{ fontWeight: 700 }}>{pricing.formatted.initialTotal}</Text>
-              </View>
-
-              {quote.customConfig!.requiresDeposit ? (
-                <View style={pdfStyles.summaryRow}>
-                  <Text style={{ color: pdfColors.inkMuted }}>
-                    Abono inicial para comenzar ({quote.customConfig!.depositPercent ?? 50}%):
-                  </Text>
-                  <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
-                    {pricing.formatted.deposit}
-                  </Text>
-                </View>
-              ) : quote.customConfig!.noDepositTiming === 'upfront' ||
-                quote.customConfig!.depositOption === 'upfront' ||
-                quote.customConfig!.depositOption === 'full_upfront' ? (
-                <View style={pdfStyles.summaryRow}>
-                  <Text style={{ color: pdfColors.inkMuted }}>Pago inicial anticipado (100%):</Text>
-                  <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
-                    {pricing.formatted.deposit}
-                  </Text>
-                </View>
-              ) : (
-                <View style={pdfStyles.summaryRow}>
-                  <Text style={{ color: pdfColors.inkMuted }}>Abono inicial requerido:</Text>
-                  <Text style={{ fontWeight: 700, color: pdfColors.inkMuted }}>No requiere (0%)</Text>
-                </View>
-              )}
-
-              <View style={pdfStyles.summaryRowHighlight}>
-                <Text>
-                  {quote.customConfig!.requiresDeposit
-                    ? 'Saldo contraentrega:'
-                    : quote.customConfig!.noDepositTiming === 'upfront' ||
-                      quote.customConfig!.depositOption === 'upfront' ||
-                      quote.customConfig!.depositOption === 'full_upfront'
-                    ? 'Saldo pendiente contraentrega:'
-                    : 'Monto total contraentrega:'}
-                </Text>
-                <Text>{pricing.formatted.balance}</Text>
-              </View>
-
-              {!quote.customConfig!.isOneTimePayment && quote.customConfig!.paymentType === 'recurring' && (
-                <View style={pdfStyles.summaryRow}>
-                  <Text style={{ color: pdfColors.inkMuted }}>Monto periódico posterior:</Text>
-                  <Text style={{ fontWeight: 700, color: pdfColors.navy900 }}>
-                    {pricing.formatted.monthlyTotal} ({quote.customConfig!.billingPeriod === 'yearly' ? 'anual' : 'mensual'})
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Condiciones de Entrega Personalizadas */}
-            <View style={pdfStyles.callout} wrap={false}>
-              <Text style={{ fontWeight: 700, marginBottom: 2 }}>Plazos y Condiciones de Entrega:</Text>
-              <Text>
-                {quote.customConfig!.deliveryConditions
-                  ? quote.customConfig!.deliveryConditions
-                  : quote.customConfig!.requiresDeposit
-                  ? `El servicio tiene un plazo estimado de entrega de ${quote.customConfig!.deliveryDays || catalog.deliveryBusinessDays} días hábiles a contar de la confirmación del abono inicial (${quote.customConfig!.depositPercent ?? 50}%) y recepción de los antecedentes solicitados. El saldo restante se cancela contraentrega a entera satisfacción del cliente.`
-                  : quote.customConfig!.noDepositTiming === 'upfront' ||
-                    quote.customConfig!.depositOption === 'upfront' ||
-                    quote.customConfig!.depositOption === 'full_upfront'
-                  ? `El servicio tiene un plazo estimado de entrega de ${quote.customConfig!.deliveryDays || catalog.deliveryBusinessDays} días hábiles a contar de la acreditación del pago total anticipado (100%) y recepción de los antecedentes requeridos. No existen pagos pendientes al momento de la entrega.`
-                  : `El servicio tiene un plazo estimado de entrega de ${quote.customConfig!.deliveryDays || catalog.deliveryBusinessDays} días hábiles. El pago total se realiza contraentrega una vez finalizado y aprobado el trabajo a entera satisfacción del cliente.`}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <Text style={pdfStyles.sectionTitle}>1. Inversión inicial (Desarrollo)</Text>
-            <View style={pdfStyles.table} wrap={false}>
-              <View style={pdfStyles.tableHeaderRow}>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>CONCEPTO</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>DETALLE</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
-                  MONTO ({currency})
-                </Text>
-              </View>
-
-              <View style={pdfStyles.tableRow}>
-                <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                  {plan.name}
-                </Text>
-                <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                  {projectType === 'construccion' ? plan.build.desc : plan.sale.desc}
-                </Text>
-                <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                  {pricing.formatted.baseAmount}
-                </Text>
-              </View>
-
-              {extraPages > 0 && (
-                <View style={pdfStyles.tableRow}>
-                  <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                    Páginas adicionales
-                  </Text>
-                  <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                    {extraPages} página(s) extra(s)
-                  </Text>
-                  <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                    {pricing.formatted.extraAmount}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Tabla 2: Suscripción y Alojamiento (Solo Construcción) */}
-            {projectType === 'construccion' && subscription && (
-              <>
-                <Text style={pdfStyles.sectionTitle}>2. Soporte mensual y alojamiento</Text>
-                <View style={pdfStyles.table} wrap={false}>
-                  <View style={pdfStyles.tableHeaderRow}>
-                    <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>SERVICIO</Text>
-                    <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>COBERTURA</Text>
-                    <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
-                      MENSUAL ({currency})
-                    </Text>
-                  </View>
-
-                  <View style={pdfStyles.tableRow}>
-                    <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                      Plan {subscription.name}
-                    </Text>
-                    <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                      {subscription.desc}
-                    </Text>
-                    <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                      {pricing.formatted.subscriptionAmount}
-                    </Text>
-                  </View>
-
-                  {hosting && (
-                    <View style={pdfStyles.tableRow}>
-                      <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                        Alojamiento Web (Hosting)
-                      </Text>
-                      <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                        {catalog.hosting.label}
-                      </Text>
-                      <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                        {pricing.formatted.hostingAmount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </>
-            )}
-
-            {/* Caja de Resumen Financiero */}
-            <View style={pdfStyles.summaryBox} wrap={false}>
-              <View style={pdfStyles.summaryRow}>
-                <Text style={{ color: pdfColors.inkMuted }}>Total inversión inicial:</Text>
-                <Text style={{ fontWeight: 700 }}>{pricing.formatted.initialTotal}</Text>
-              </View>
-              <View style={pdfStyles.summaryRow}>
-                <Text style={{ color: pdfColors.inkMuted }}>
-                  Abono inicial para iniciar ({catalog.depositPercent}%):
-                </Text>
-                <Text style={{ fontWeight: 700, color: pdfColors.navy700 }}>
-                  {pricing.formatted.deposit}
-                </Text>
-              </View>
-              <View style={pdfStyles.summaryRowHighlight}>
-                <Text>Saldo contraentrega:</Text>
-                <Text>{pricing.formatted.balance}</Text>
-              </View>
-            </View>
-
-            {/* Condiciones de Entrega */}
-            <View style={pdfStyles.callout} wrap={false}>
-              <Text style={{ fontWeight: 700, marginBottom: 2 }}>Plazos y Entrega:</Text>
-              <Text>
-                {projectType === 'construccion'
-                  ? `El desarrollo del sitio tiene un plazo promedio de ${catalog.deliveryBusinessDays} días hábiles una vez recibido el abono inicial y los contenidos necesarios. Contraentrega: Una vez pagado el saldo restante más el primer mes de mantención/hosting, se publica el sitio web.`
-                  : `El desarrollo tiene un plazo estimado de ${catalog.deliveryBusinessDays} días hábiles. El traspaso del código fuente se realizará una vez pagado el saldo total restante, en forma de repositorio GitHub o archivo comprimido.`}
-              </Text>
-            </View>
-          </>
-        )}
-
-        {/* Datos Bancarios */}
-        <View style={{ marginTop: 6 }} wrap={false}>
-          <Text style={{ fontWeight: 700, fontSize: 8.5, color: pdfColors.navy900 }}>
-            Datos para transferencia bancaria:
-          </Text>
-          {issuer.bankDetails.map((line, idx) => (
-            <Text key={idx} style={{ fontSize: 8, color: pdfColors.inkMuted }}>
-              • {line}
-            </Text>
           ))}
+          <View style={pdfStyles.metaCell}>
+            <Text style={pdfStyles.metaCellLabel}>Prototipo</Text>
+            {prototypeUrl ? (
+              <Link src={prototypeUrl} style={[pdfStyles.metaCellValue, { color: pdfColors.navy700 }]}>
+                Ver prototipo interactivo
+              </Link>
+            ) : (
+              <Text style={[pdfStyles.metaCellValue, { color: pdfColors.inkMuted, fontWeight: 400 }]}>
+                No aplica
+              </Text>
+            )}
+          </View>
         </View>
 
-        {/* Nota USD si aplica */}
+        {/* 1. Qué incluye */}
+        <Text style={pdfStyles.blockLabel}>1 · Qué incluye</Text>
+        <DetailTable
+          amountHeader={`Monto (${currency})`}
+          rows={detailRows}
+          totalLabel={detailTotalLabel}
+          totalAmount={
+            custom && !custom.isOneTimePayment && custom.paymentType === 'recurring'
+              ? pricing.formatted.monthlyTotal
+              : pricing.formatted.initialTotal
+          }
+        />
+        {monthlyRows.length > 0 && (
+          <DetailTable
+            amountHeader={`Mensual (${currency})`}
+            rows={monthlyRows}
+            totalLabel="Total mensual (desde la publicación)"
+            totalAmount={pricing.formatted.monthlyTotal}
+          />
+        )}
+
+        {/* 2. Total y esquema de pagos */}
+        <View wrap={false}>
+          <Text style={pdfStyles.blockLabel}>2 · Cuánto y cuándo se paga</Text>
+          <View style={pdfStyles.totalHero}>
+            <View style={{ flex: 1, paddingRight: 14 }}>
+              <Text style={pdfStyles.totalHeroLabel}>{paymentPlan.totalLabel}</Text>
+              <Text style={pdfStyles.totalHeroCaption}>{paymentPlan.totalCaption}</Text>
+            </View>
+            <Text style={pdfStyles.totalHeroAmount}>
+              {paymentPlan.totalAmount}
+              {paymentPlan.totalSuffix ? (
+                <Text style={pdfStyles.totalHeroSuffix}> {paymentPlan.totalSuffix}</Text>
+              ) : null}
+            </Text>
+          </View>
+
+          {useCards ? (
+            <View style={pdfStyles.stepsRow}>
+              {steps.map((s, i) => (
+                <StepCard key={i} step={s} />
+              ))}
+            </View>
+          ) : (
+            <View style={pdfStyles.table}>
+              <View style={pdfStyles.tableHeaderRow}>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '25%' }]}>Cuota</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '50%' }]}>Cuándo</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '25%', textAlign: 'right' }]}>Monto</Text>
+              </View>
+              {steps.map((s, i) => (
+                <View
+                  key={i}
+                  style={[pdfStyles.stepListRow, s.isDeposit ? { backgroundColor: '#FCF8EE' } : {}]}
+                >
+                  <Text style={[pdfStyles.tableCell, { width: '25%', fontWeight: 700, color: pdfColors.navy900 }]}>
+                    {s.title}
+                  </Text>
+                  <Text style={[pdfStyles.tableCell, { width: '50%', color: pdfColors.inkMuted }]}>{s.when}</Text>
+                  <Text style={[pdfStyles.tableCellRight, { width: '25%' }]}>{s.amount}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {paymentPlan.recurring && (
+            <View style={pdfStyles.recurringBox}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={pdfStyles.stepTitle}>{paymentPlan.recurring.label}</Text>
+                <Text style={pdfStyles.stepWhen}>{paymentPlan.recurring.detail}</Text>
+              </View>
+              <Text style={{ fontSize: 13, fontWeight: 700, color: pdfColors.navy900 }}>
+                {paymentPlan.recurring.amount}
+                <Text style={{ fontSize: 8.5, fontWeight: 500, color: pdfColors.inkMuted }}>
+                  {' '}
+                  {paymentPlan.recurring.periodLabel}
+                </Text>
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* 3. Plazos y datos de pago */}
+        <View wrap={false}>
+          <Text style={pdfStyles.blockLabel}>3 · Plazos y forma de pago</Text>
+          <View style={[pdfStyles.twoCols, { marginBottom: 4 }]}>
+            <View style={[pdfStyles.callout, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+              <Text style={{ fontWeight: 700, fontSize: 8.5, marginBottom: 2 }}>Plazo de entrega</Text>
+              <Text style={{ fontSize: 8, lineHeight: 1.35 }}>{deliveryText}</Text>
+            </View>
+            <View style={[pdfStyles.callout, { flex: 1, marginTop: 0, marginBottom: 0, borderLeftColor: pdfColors.brass }]}>
+              <Text style={{ fontWeight: 700, fontSize: 8.5, marginBottom: 2 }}>Datos para transferencia</Text>
+              {issuer.bankDetails.map((line, idx) => (
+                <Text key={idx} style={{ fontSize: 8, lineHeight: 1.35 }}>{line}</Text>
+              ))}
+            </View>
+          </View>
+        </View>
+
         {currency === 'USD' && exchangeRate && (
-          <Text style={{ marginTop: 8, fontSize: 7.5, color: pdfColors.inkMuted }}>
-            * Valores expresados en USD al tipo de cambio de referencia de {exchangeRate} CLP por 1 USD. {quote.exchangeNote || ''}
+          <Text style={{ marginTop: 4, fontSize: 7.2, color: pdfColors.inkMuted }}>
+            * Valores expresados en USD al tipo de cambio de referencia de {exchangeRate} CLP por 1 USD.{' '}
+            {quote.exchangeNote || ''}
           </Text>
         )}
 
-        {/* Pie Fijo */}
-        <View style={pdfStyles.fixedFooter} fixed>
-          <Text>
-            {client} · {project}
+        {includeServices && (
+          <Text style={{ marginTop: 4, fontSize: 7.2, color: pdfColors.inkMuted }}>
+            En las páginas siguientes encontrarás un anexo con una breve presentación de los servicios
+            y sus condiciones.
           </Text>
-          <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
-        </View>
+        )}
+
+        <InteriorFooter left={`${client} · ${project}`} />
       </Page>
 
       {/* =========================================================================
-          PÁGINAS 3 A N: CLÁUSULAS Y PÁGINAS NORMATIVAS (terms)
+          PÁGINAS 3+: ANEXO OPCIONAL "PRESENTACIÓN DE SERVICIOS"
           ========================================================================= */}
-      {terms.pages.map((termsPage) => {
-        // Filtrar secciones que tengan bloques visibles según projectType
-        const visibleSections = termsPage.sections
-          .map((sec) => ({
-            ...sec,
-            blocks: sec.blocks.filter(
-              (b) => !b.showWhen?.projectType || b.showWhen.projectType === projectType
-            ),
-          }))
-          .filter((sec) => sec.blocks.length > 0);
-
-        if (visibleSections.length === 0) return null;
-
-        return (
-          <Page key={termsPage.pageNumber} size="A4" style={pdfStyles.interiorPage}>
-            {/* Cabecera Fija */}
-            <View style={pdfStyles.fixedHeader} fixed>
-              <View style={pdfStyles.headerBrand}>
-                <Image src={ISOLOGO_BLACK_BASE64} style={pdfStyles.headerLogo} />
-                <Text style={pdfStyles.headerBrandTitle}>{issuer.name}</Text>
-              </View>
-              <Text style={pdfStyles.headerDocTag}>{issuer.documentTag}</Text>
-            </View>
-
-            {/* Secciones de la página */}
-            {visibleSections.map((sec) => (
-              <View key={sec.id} style={{ marginBottom: 12 }}>
-                {sec.title ? (
-                  <Text style={pdfStyles.sectionTitle}>{sec.title}</Text>
-                ) : null}
-
-                {sec.blocks.map((block, bIdx) => {
-                  if (block.type === 'paragraph') {
-                    return (
-                      <Text key={bIdx} style={{ marginBottom: 6 }}>
-                        {resolveTokens(block.content, tokenContext)}
-                      </Text>
-                    );
-                  }
-
-                  if (block.type === 'callout') {
-                    return (
-                      <View key={bIdx} style={pdfStyles.callout} wrap={false}>
-                        {block.title && (
-                          <Text style={{ fontWeight: 700, marginBottom: 2 }}>
-                            {block.title}
-                          </Text>
-                        )}
-                        <Text>{resolveTokens(block.content, tokenContext)}</Text>
-                      </View>
-                    );
-                  }
-
-                  if (block.type === 'list') {
-                    return (
-                      <View key={bIdx} style={{ marginBottom: 6, paddingLeft: 8 }} wrap={false}>
-                        {block.items.map((it, iIdx) => (
-                          <Text key={iIdx} style={{ marginBottom: 2 }}>
-                            • {resolveTokens(it, tokenContext)}
-                          </Text>
-                        ))}
-                      </View>
-                    );
-                  }
-
-                  if (block.type === 'tags') {
-                    return (
-                      <View key={bIdx} style={pdfStyles.tagList} wrap={false}>
-                        {block.tags.map((tg, tIdx) => (
-                          <View key={tIdx} style={pdfStyles.tagBadge}>
-                            <Text>{resolveTokens(tg, tokenContext)}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    );
-                  }
-
-                  if (block.type === 'table') {
-                    return (
-                      <View key={bIdx} style={pdfStyles.table} wrap={false}>
-                        {block.rows.map((row, rIdx) => (
-                          <View
-                            key={rIdx}
-                            style={rIdx === 0 ? pdfStyles.tableHeaderRow : pdfStyles.tableRow}
-                          >
-                            {row.map((cell, cIdx) => (
-                              <Text
-                                key={cIdx}
-                                style={[
-                                  rIdx === 0 ? pdfStyles.tableHeaderCell : pdfStyles.tableCell,
-                                  { flex: 1 },
-                                ]}
-                              >
-                                {resolveTokens(cell, tokenContext)}
-                              </Text>
-                            ))}
-                          </View>
-                        ))}
-                      </View>
-                    );
-                  }
-
-                  if (block.type === 'catalogTable') {
-                    return (
-                      <View key={bIdx} style={pdfStyles.table} wrap={false}>
-                        <View style={pdfStyles.tableHeaderRow}>
-                          <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>PLAN</Text>
-                          <Text style={[pdfStyles.tableHeaderCell, { width: '40%' }]}>ALCANCE</Text>
-                          <Text style={[pdfStyles.tableHeaderCell, { width: '20%', textAlign: 'right' }]}>
-                            VALOR
-                          </Text>
-                        </View>
-                        {block.source === 'plans'
-                          ? catalog.plans.map((p) => (
-                              <View key={p.id} style={pdfStyles.tableRow}>
-                                <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                                  {p.name}
-                                </Text>
-                                <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                                  {projectType === 'construccion' ? p.build.desc : p.sale.desc}
-                                </Text>
-                                <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                                  {currency === 'CLP'
-                                    ? `$${(projectType === 'construccion' ? p.build.price : p.sale.price).toLocaleString('es-CL')} CLP`
-                                    : `US$${((projectType === 'construccion' ? p.build.price : p.sale.price) / (exchangeRate || 950)).toFixed(2)}`}
-                                </Text>
-                              </View>
-                            ))
-                          : catalog.subscriptions.map((s) => (
-                              <View key={s.id} style={pdfStyles.tableRow}>
-                                <Text style={[pdfStyles.tableCell, { width: '40%', fontWeight: 700 }]}>
-                                  {s.name}
-                                </Text>
-                                <Text style={[pdfStyles.tableCell, { width: '40%', color: pdfColors.inkMuted }]}>
-                                  {s.desc}
-                                </Text>
-                                <Text style={[pdfStyles.tableCellRight, { width: '20%' }]}>
-                                  {currency === 'CLP'
-                                    ? `$${s.price.toLocaleString('es-CL')} CLP/mes`
-                                    : `US$${(s.price / (exchangeRate || 950)).toFixed(2)}/mes`}
-                                </Text>
-                              </View>
-                            ))}
-                      </View>
-                    );
-                  }
-
-                  return null;
-                })}
-              </View>
-            ))}
-
-            {/* Pie Fijo */}
-            <View style={pdfStyles.fixedFooter} fixed>
-              <Text>
-                {client} · {project}
-              </Text>
-              <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
-            </View>
-          </Page>
-        );
-      })}
+      {includeServices && <ServicesPresentation quote={quote} />}
 
       {/* Renderizar el Esqueleto de Diseño al final si está incluido */}
       {skeletonDesign && <SkeletonPages design={skeletonDesign} />}

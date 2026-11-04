@@ -83,6 +83,19 @@ export function formatCurrency(amount: number, currency: CurrencyCode): string {
   }).format(dollars);
 }
 
+/**
+ * Formatea un precio del catálogo (siempre almacenado en CLP) en la moneda de la cotización.
+ */
+export function formatCatalogPrice(
+  clp: number,
+  currency: CurrencyCode,
+  exchangeRate?: number | undefined
+): string {
+  if (currency === 'CLP') return formatCurrency(clp, 'CLP');
+  const rate = exchangeRate && exchangeRate > 0 ? exchangeRate : 950;
+  return formatCurrency(roundHalfUp((clp / rate) * 100), 'USD');
+}
+
 export function calculatePricing(input: PricingInput): PricingResult {
   const {
     projectType,

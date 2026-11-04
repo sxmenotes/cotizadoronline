@@ -189,7 +189,7 @@ describe('Documento PDF del Presupuesto (Sección 9.4)', () => {
     const doc = React.createElement(QuoteDocument, { quote });
     const { fullText, numPages } = await extractPdfData(doc);
 
-    expect(numPages).toBeGreaterThanOrEqual(4);
+    expect(numPages).toBe(2);
     expect(fullText).toContain('Desarrollo de Aplicación Móvil iOS/Android');
     expect(fullText).toContain('App nativa con sincronización en tiempo real');
     expect(fullText).toContain('Presupuesto Personalizado (A medida)');
@@ -216,10 +216,45 @@ describe('Documento PDF del Presupuesto (Sección 9.4)', () => {
     const doc = React.createElement(QuoteDocument, { quote });
     const { fullText, numPages } = await extractPdfData(doc);
 
-    expect(numPages).toBeGreaterThanOrEqual(4);
+    // Presupuesto personalizado: por defecto sin anexo de servicios (portada + resumen)
+    expect(numPages).toBe(2);
     expect(fullText).toContain('Auditoría de Ciberseguridad Web');
-    expect(fullText).toContain('Pago 100% anticipado');
+    expect(fullText).toContain('100% anticipado');
     expect(fullText).toContain('450.000');
     expect(fullText).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it('Caso 8: Anexo de servicios se puede activar/desactivar y tiene portada propia', async () => {
+    const withAnnex = await extractPdfData(React.createElement(QuoteDocument, { quote: makeQuote() }));
+    expect(withAnnex.fullText).toContain('Presentación');
+    expect(withAnnex.fullText).toContain('Esta sección es solo referencial');
+    expect(withAnnex.fullText).toContain('TU PLAN');
+    expect(withAnnex.fullText).not.toContain('\ufffd');
+
+    const without = await extractPdfData(
+      React.createElement(QuoteDocument, { quote: makeQuote({ includeServicesInPdf: false }) })
+    );
+    expect(without.numPages).toBe(2);
+    expect(without.fullText).not.toContain('Esta sección es solo referencial');
+  });
+
+  it('Caso 9: Cuotas personalizadas muestran el monto de cada cuota', async () => {
+    const quote = makeQuote({
+      quoteMode: 'custom',
+      customConfig: {
+        itemName: 'Sistema de reservas',
+        price: 300000,
+        isOneTimePayment: false,
+        paymentType: 'installments',
+        installmentsCount: 3,
+        requiresDeposit: true,
+        depositPercent: 50,
+      },
+    });
+    const { fullText } = await extractPdfData(React.createElement(QuoteDocument, { quote }));
+    expect(fullText).toContain('Cuota 1 de 3');
+    expect(fullText).toContain('Cuota 3 de 3');
+    expect(fullText).toContain('$100.000');
+    expect(fullText).toContain('$300.000');
   });
 });

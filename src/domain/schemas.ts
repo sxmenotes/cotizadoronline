@@ -146,6 +146,7 @@ export const QuoteSchema = z.object({
   issuer: IssuerSchema,
   linkedSkeletonId: z.string().optional(),
   includeSkeletonInPdf: z.boolean().optional(),
+  includeServicesInPdf: z.boolean().optional(),
   quoteMode: z.enum(['standard', 'custom']).optional(),
   customConfig: CustomQuoteConfigSchema.optional(),
 });

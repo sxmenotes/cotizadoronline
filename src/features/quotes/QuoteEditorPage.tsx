@@ -30,6 +30,7 @@ import { useQuotesStore } from '../../store/quotesStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useSkeletonStore } from '../../store/skeletonStore';
 import { calculatePricing, PricingResult } from '../../domain/pricing';
+import { shouldIncludeServices } from '../../domain/paymentSchedule';
 import type {
   Quote,
   QuoteVersionType,
@@ -142,6 +143,7 @@ export const QuoteEditorPage: React.FC = () => {
           issuer,
           quoteMode: draft.quoteMode || 'standard',
           customConfig: draft.customConfig || undefined,
+          includeServicesInPdf: draft.includeServicesInPdf,
         });
       } else {
         // Inicializar nuevo
@@ -688,6 +690,28 @@ export const QuoteEditorPage: React.FC = () => {
                   />
                 </div>
               )}
+            </div>
+
+            {/* Contenido opcional del PDF: anexo de presentación de servicios */}
+            <div className="pt-2 border-t border-hairline/60">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
+                Contenido del PDF
+              </span>
+              <div className="flex flex-col justify-center gap-1.5 rounded-lg border border-hairline bg-paper-1 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-navy-900">Incluir presentación de servicios</p>
+                    <p className="text-[11px] text-ink-muted leading-tight">
+                      Anexo con portada propia después del resumen: planes, mantención, cambios, dominio/hosting y venta con código.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={shouldIncludeServices(currentQuote)}
+                    onCheckedChange={(checked) => updateField('includeServicesInPdf', checked)}
+                    aria-label="Incluir presentación de servicios en el PDF"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Vinculación con Esqueleto */}
