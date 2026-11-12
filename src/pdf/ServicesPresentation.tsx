@@ -3,7 +3,7 @@ import { Page, View } from '@react-pdf/renderer';
 import { PdfText as Text } from './PdfText';
 import { pdfStyles, pdfColors } from './styles';
 import { InteriorHeader, InteriorFooter, Bullet } from './PdfChrome';
-import { formatCatalogPrice } from '../domain/pricing';
+import { formatCatalogPrice, STATIC_PUBLICATION_SURCHARGE_CLP } from '../domain/pricing';
 import type { Quote } from '../domain/types';
 
 /**
@@ -40,14 +40,18 @@ export const ServicesPresentation: React.FC<{ quote: Quote }> = ({ quote }) => {
   const price = (clp: number) => formatCatalogPrice(clp, currency, exchangeRate);
   const isStandard = quote.quoteMode !== 'custom';
   const isBuild = quote.projectType === 'construccion';
+  const isStatic = quote.projectType === 'estatica';
+  const isSale = quote.projectType === 'venta';
   const footerLeft = `${client} · ${project}`;
 
   const paidSubs = catalog.subscriptions.filter((s) => s.price > 0);
   const minSub = paidSubs.length ? Math.min(...paidSubs.map((s) => s.price)) : 0;
   const extra = price(catalog.extraPagePrice);
   const hosting = price(catalog.hosting.monthlyPrice);
+  const staticFee = price(STATIC_PUBLICATION_SURCHARGE_CLP);
   const examplePlan = catalog.plans[0];
   const minBuild = catalog.plans.length ? Math.min(...catalog.plans.map((p) => p.build.price)) : 0;
+  const minStatic = minBuild + STATIC_PUBLICATION_SURCHARGE_CLP;
   const minSale = catalog.plans.length ? Math.min(...catalog.plans.map((p) => p.sale.price)) : 0;
 
   const index = [
@@ -122,7 +126,7 @@ export const ServicesPresentation: React.FC<{ quote: Quote }> = ({ quote }) => {
         />
         <View style={pdfStyles.cardsRow} wrap={false}>
           {catalog.plans.map((p) => {
-            const active = isStandard && isBuild && p.id === quote.planId;
+            const active = isStandard && (isBuild || isStatic) && p.id === quote.planId;
             return (
               <View key={p.id} style={[pdfStyles.planCard, active ? pdfStyles.planCardActive : {}]}>
                 {active ? <Text style={pdfStyles.activeBadge}>Tu plan</Text> : null}
@@ -138,8 +142,10 @@ export const ServicesPresentation: React.FC<{ quote: Quote }> = ({ quote }) => {
         </View>
         <View style={pdfStyles.noteLine} wrap={false}>
           <Text>
-            <Text style={{ fontWeight: 700 }}>¿Necesitas más páginas? </Text>
-            Cada página adicional a las de tu plan cuesta {extra}.
+            <Text style={{ fontWeight: 700 }}>Páginas adicionales: </Text>
+            {extra} c/u.{' '}
+            <Text style={{ fontWeight: 700 }}>Opción Publicación estática (+{staticFee} fijos): </Text>
+            mismos planes de construcción sin mantención mensual (el sitio queda cerrado a ediciones futuras y todo cambio posterior se cotiza aparte).
           </Text>
         </View>
 
@@ -286,7 +292,7 @@ export const ServicesPresentation: React.FC<{ quote: Quote }> = ({ quote }) => {
         />
         <View style={pdfStyles.cardsRow} wrap={false}>
           {catalog.plans.map((p) => {
-            const active = isStandard && !isBuild && p.id === quote.planId;
+            const active = isStandard && isSale && p.id === quote.planId;
             return (
               <View key={p.id} style={[pdfStyles.planCard, active ? pdfStyles.planCardActive : {}]}>
                 {active ? <Text style={pdfStyles.activeBadge}>Tu plan</Text> : null}
@@ -350,23 +356,25 @@ export const ServicesPresentation: React.FC<{ quote: Quote }> = ({ quote }) => {
           <SectionHead num={6} title="¿Qué opción me conviene?" />
           <View style={pdfStyles.table}>
             <View style={pdfStyles.tableHeaderRow}>
-              <Text style={[pdfStyles.tableHeaderCell, { width: '28%' }]}> </Text>
-              <Text style={[pdfStyles.tableHeaderCell, { width: '36%' }]}>Construcción + mantención</Text>
-              <Text style={[pdfStyles.tableHeaderCell, { width: '36%' }]}>Venta con código</Text>
+              <Text style={[pdfStyles.tableHeaderCell, { width: '22%' }]}> </Text>
+              <Text style={[pdfStyles.tableHeaderCell, { width: '26%' }]}>Construcción + mantención</Text>
+              <Text style={[pdfStyles.tableHeaderCell, { width: '26%' }]}>Publicación estática</Text>
+              <Text style={[pdfStyles.tableHeaderCell, { width: '26%' }]}>Venta con código</Text>
             </View>
             {[
-              ['Pago inicial', `Menor (desde ${price(minBuild)})`, `Mayor (desde ${price(minSale)})`],
-              ['Mensualidad', minSub > 0 ? `Sí, desde ${price(minSub)}` : 'Según plan', 'No'],
-              ['Soporte y cambios', 'Incluidos según tu plan', 'No incluidos'],
-              ['Código fuente', 'Puedes comprarlo después', 'Se entrega al finalizar'],
-              ['Ideal para', 'Quien prefiere despreocuparse', 'Quien tiene equipo técnico propio'],
+              ['Pago inicial', `Desde ${price(minBuild)}`, `Desde ${price(minStatic)} (+${staticFee})`, `Desde ${price(minSale)}`],
+              ['Mensualidad', minSub > 0 ? `Sí, desde ${price(minSub)}` : 'Según plan', 'No tiene', 'No tiene'],
+              ['Soporte y cambios', 'Incluidos según tu plan', 'No (se cotizan aparte)', 'No incluidos'],
+              ['Código fuente', 'Puedes comprarlo después', 'No incluido', 'Se entrega al finalizar'],
+              ['Ideal para', 'Quien prefiere despreocuparse', 'Sitio informativo fijo sin cambios', 'Quien tiene equipo técnico propio'],
             ].map((row, i) => (
               <View key={i} style={pdfStyles.tableRow}>
-                <Text style={[pdfStyles.tableCell, { width: '28%', fontWeight: 700, color: pdfColors.navy900 }]}>
+                <Text style={[pdfStyles.tableCell, { width: '22%', fontWeight: 700, color: pdfColors.navy900 }]}>
                   {row[0]}
                 </Text>
-                <Text style={[pdfStyles.tableCell, { width: '36%' }]}>{row[1]}</Text>
-                <Text style={[pdfStyles.tableCell, { width: '36%' }]}>{row[2]}</Text>
+                <Text style={[pdfStyles.tableCell, { width: '26%' }]}>{row[1]}</Text>
+                <Text style={[pdfStyles.tableCell, { width: '26%' }]}>{row[2]}</Text>
+                <Text style={[pdfStyles.tableCell, { width: '26%' }]}>{row[3]}</Text>
               </View>
             ))}
           </View>

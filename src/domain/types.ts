@@ -1,4 +1,4 @@
-export type ProjectType = 'construccion' | 'venta';
+export type ProjectType = 'construccion' | 'estatica' | 'venta';
 export type CurrencyCode = 'CLP' | 'USD';
 export type QuoteVersionType = 'first' | 'revision' | 'final';
 

@@ -83,6 +83,9 @@ export function formatCurrency(amount: number, currency: CurrencyCode): string {
   }).format(dollars);
 }
 
+/** Adicional fijo en CLP para la modalidad de Publicación estática (sin mantención mensual) */
+export const STATIC_PUBLICATION_SURCHARGE_CLP = 10000;
+
 /**
  * Formatea un precio del catálogo (siempre almacenado en CLP) en la moneda de la cotización.
  */
@@ -312,14 +315,18 @@ export function calculatePricing(input: PricingInput): PricingResult {
   }
 
   // 1. Cálculo base en CLP
-  const basePriceCLP =
-    projectType === 'construccion' ? plan.build.price : plan.sale.price;
+  const isEstatica = projectType === 'estatica';
+  const isVenta = projectType === 'venta';
+  const hasMonthlyRecurring = projectType === 'construccion';
+
+  const planBaseCLP = isVenta ? plan.sale.price : plan.build.price;
+  const staticSurchargeCLP = isEstatica ? STATIC_PUBLICATION_SURCHARGE_CLP : 0;
+  const basePriceCLP = planBaseCLP + staticSurchargeCLP;
   const extraPriceCLP = extraPages * catalog.extraPagePrice;
 
-  // Si projectType === 'venta', suscripción y hosting valen 0
-  const isVenta = projectType === 'venta';
-  const subPriceCLP = isVenta ? 0 : subscription.price;
-  const hostingPriceCLP = isVenta || !hosting ? 0 : catalog.hosting.monthlyPrice;
+  // En 'venta' y 'estatica', suscripción y hosting mensuales valen 0
+  const subPriceCLP = hasMonthlyRecurring ? subscription.price : 0;
+  const hostingPriceCLP = hasMonthlyRecurring && hosting ? catalog.hosting.monthlyPrice : 0;
 
   if (currency === 'CLP') {
     const initialTotal = basePriceCLP + extraPriceCLP;
@@ -331,11 +338,20 @@ export function calculatePricing(input: PricingInput): PricingResult {
     const lineItems: PricingLineItem[] = [
       {
         name: plan.name,
-        detail: projectType === 'construccion' ? plan.build.desc : plan.sale.desc,
-        amount: basePriceCLP,
-        formatted: formatCurrency(basePriceCLP, 'CLP'),
+        detail: isVenta ? plan.sale.desc : plan.build.desc,
+        amount: planBaseCLP,
+        formatted: formatCurrency(planBaseCLP, 'CLP'),
       },
     ];
+
+    if (isEstatica) {
+      lineItems.push({
+        name: 'Publicación estática (cargo único)',
+        detail: 'Publicación definitiva del sitio sin mantención mensual ni ediciones posteriores',
+        amount: staticSurchargeCLP,
+        formatted: formatCurrency(staticSurchargeCLP, 'CLP'),
+      });
+    }
 
     if (extraPages > 0) {
       lineItems.push({
@@ -376,7 +392,9 @@ export function calculatePricing(input: PricingInput): PricingResult {
   const rate = exchangeRate!;
   const toMinorUSD = (clp: number) => roundHalfUp((clp / rate) * 100);
 
-  const baseMinor = toMinorUSD(basePriceCLP);
+  const planBaseMinor = toMinorUSD(planBaseCLP);
+  const staticSurchargeMinor = isEstatica ? toMinorUSD(staticSurchargeCLP) : 0;
+  const baseMinor = planBaseMinor + staticSurchargeMinor;
   const extraMinor = toMinorUSD(extraPriceCLP);
   const initialTotalMinor = baseMinor + extraMinor;
 
@@ -385,19 +403,28 @@ export function calculatePricing(input: PricingInput): PricingResult {
   );
   const remainingDepositMinor = initialTotalMinor - depositMinor;
 
-  const subMinor = isVenta ? 0 : toMinorUSD(subPriceCLP);
-  const hostingMinor = isVenta || !hosting ? 0 : toMinorUSD(hostingPriceCLP);
+  const subMinor = hasMonthlyRecurring ? toMinorUSD(subPriceCLP) : 0;
+  const hostingMinor = hasMonthlyRecurring && hosting ? toMinorUSD(hostingPriceCLP) : 0;
   const monthlyMinor = subMinor + hostingMinor;
   const balanceMinor = remainingDepositMinor + monthlyMinor;
 
   const lineItems: PricingLineItem[] = [
     {
       name: plan.name,
-      detail: projectType === 'construccion' ? plan.build.desc : plan.sale.desc,
-      amount: baseMinor,
-      formatted: formatCurrency(baseMinor, 'USD'),
+      detail: isVenta ? plan.sale.desc : plan.build.desc,
+      amount: planBaseMinor,
+      formatted: formatCurrency(planBaseMinor, 'USD'),
     },
   ];
+
+  if (isEstatica) {
+    lineItems.push({
+      name: 'Publicación estática (cargo único)',
+      detail: 'Publicación definitiva del sitio sin mantención mensual ni ediciones posteriores',
+      amount: staticSurchargeMinor,
+      formatted: formatCurrency(staticSurchargeMinor, 'USD'),
+    });
+  }
 
   if (extraPages > 0) {
     lineItems.push({

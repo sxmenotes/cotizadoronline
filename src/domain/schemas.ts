@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const ProjectTypeSchema = z.enum(['construccion', 'venta']);
+export const ProjectTypeSchema = z.enum(['construccion', 'estatica', 'venta']);
 export const CurrencyCodeSchema = z.enum(['CLP', 'USD']);
 export const QuoteVersionTypeSchema = z.enum(['first', 'revision', 'final']);
 

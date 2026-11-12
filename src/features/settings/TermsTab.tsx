@@ -271,6 +271,7 @@ export const TermsTab: React.FC = () => {
                       options={[
                         { value: 'all', label: 'Siempre visible' },
                         { value: 'construccion', label: 'Solo Construcción' },
+                        { value: 'estatica', label: 'Solo Publicación estática' },
                         { value: 'venta', label: 'Solo Venta con código' },
                       ]}
                     />

@@ -3,11 +3,17 @@ import { Document, Page, View, Image, Link } from '@react-pdf/renderer';
 import { PdfText as Text } from './PdfText';
 import type { Quote, SkeletonDesign } from '../domain/types';
 import { calculatePricing } from '../domain/pricing';
-import { buildPaymentPlan, shouldIncludeServices, type PaymentStep } from '../domain/paymentSchedule';
+import {
+  buildPaymentPlan,
+  shouldIncludeDisclaimer,
+  shouldIncludeServices,
+  type PaymentStep,
+} from '../domain/paymentSchedule';
 import { registerPdfFonts } from './fonts';
 import { pdfStyles, pdfColors } from './styles';
 import { ISOLOGO_WHITE_BASE64 } from './brandLogos';
 import { InteriorHeader, InteriorFooter } from './PdfChrome';
+import { DisclaimerPage } from './DisclaimerPage';
 import { ServicesPresentation } from './ServicesPresentation';
 import { SkeletonPages } from '../features/skeleton/wireframe/SkeletonDocument';
 
@@ -32,7 +38,7 @@ const DetailTable: React.FC<{
   totalLabel: string;
   totalAmount: string;
 }> = ({ amountHeader, rows, totalLabel, totalAmount }) => (
-  <View style={[pdfStyles.table, { marginBottom: 6 }]} wrap={false}>
+  <View style={[pdfStyles.table, { marginBottom: 5 }]} wrap={false}>
     <View style={pdfStyles.tableHeaderRow}>
       <Text style={[pdfStyles.tableHeaderCell, { width: '75%' }]}>Concepto</Text>
       <Text style={[pdfStyles.tableHeaderCell, { width: '25%', textAlign: 'right' }]}>{amountHeader}</Text>
@@ -42,7 +48,7 @@ const DetailTable: React.FC<{
         <View style={{ width: '75%', paddingRight: 8 }}>
           <Text style={[pdfStyles.tableCell, { fontWeight: 700, color: pdfColors.navy900 }]}>{r.concept}</Text>
           {r.detail ? (
-            <Text style={[pdfStyles.tableCell, { color: pdfColors.inkMuted, fontSize: 7.8, marginTop: 1.5 }]}>
+            <Text style={[pdfStyles.tableCell, { color: pdfColors.inkMuted, fontSize: 7.6, marginTop: 1 }]}>
               {r.detail}
             </Text>
           ) : null}
@@ -54,7 +60,7 @@ const DetailTable: React.FC<{
       <Text style={[pdfStyles.tableCell, { width: '75%', fontWeight: 700, color: pdfColors.navy900 }]}>
         {totalLabel}
       </Text>
-      <Text style={[pdfStyles.tableCellRight, { width: '25%', fontWeight: 700, fontSize: 9.5 }]}>{totalAmount}</Text>
+      <Text style={[pdfStyles.tableCellRight, { width: '25%', fontWeight: 700, fontSize: 9.2 }]}>{totalAmount}</Text>
     </View>
   </View>
 );
@@ -108,12 +114,12 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
   });
 
   const paymentPlan = buildPaymentPlan(quote, pricing);
+  const includeDisclaimer = shouldIncludeDisclaimer(quote);
   const includeServices = shouldIncludeServices(quote);
 
   const custom = quote.quoteMode === 'custom' ? quote.customConfig : undefined;
   const isCustom = !!custom;
 
-  const plan = catalog.plans.find((p) => p.id === planId) || catalog.plans[0]!;
   const subscription = catalog.subscriptions.find((s) => s.id === subscriptionId);
 
   // Formato de fecha larga en español
@@ -136,6 +142,8 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
     ? 'Presupuesto Personalizado (A medida)'
     : projectType === 'construccion'
     ? 'Construcción y mantención'
+    : projectType === 'estatica'
+    ? 'Publicación estática (sin mantención)'
     : 'Venta con código fuente';
 
   // ---------------------------------------------------------------------------
@@ -156,19 +164,17 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
       ? `Total ${custom.billingPeriod === 'yearly' ? 'anual' : 'mensual'}`
       : 'Total del servicio';
   } else {
-    detailRows.push({
-      concept: plan.name,
-      detail: projectType === 'construccion' ? plan.build.desc : plan.sale.desc,
-      amount: pricing.formatted.baseAmount,
-    });
-    if (extraPages > 0) {
+    for (const item of pricing.lineItems) {
       detailRows.push({
-        concept: 'Páginas adicionales',
-        detail: `${extraPages} ${extraPages === 1 ? 'página extra' : 'páginas extra'}`,
-        amount: pricing.formatted.extraAmount,
+        concept: item.name,
+        detail: item.detail,
+        amount: item.formatted,
       });
     }
-    detailTotalLabel = 'Total del desarrollo (pago único)';
+    detailTotalLabel =
+      projectType === 'estatica'
+        ? 'Total desarrollo y publicación estática (pago único)'
+        : 'Total del desarrollo (pago único)';
 
     if (projectType === 'construccion' && pricing.monthlyTotal > 0) {
       monthlyRows = [];
@@ -211,6 +217,8 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
     deliveryText =
       projectType === 'construccion'
         ? `Plazo promedio de ${catalog.deliveryBusinessDays} días hábiles desde la recepción del abono inicial y los contenidos necesarios. El sitio se publica una vez pagado el saldo junto al primer mes de mantención.`
+        : projectType === 'estatica'
+        ? `Plazo promedio de ${catalog.deliveryBusinessDays} días hábiles desde la recepción del abono inicial y los contenidos. El sitio se publica de forma estática una vez pagado el saldo (sin mantención mensual ni ediciones posteriores).`
         : `Plazo estimado de ${catalog.deliveryBusinessDays} días hábiles. El código fuente se entrega (repositorio GitHub o archivo comprimido) una vez pagado el saldo restante.`;
   }
 
@@ -226,8 +234,8 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
       language="es-CL"
     >
       {/* =========================================================================
-          PÁGINA 1: PORTADA EDITORIAL (Fondo Azul Marino)
-          ========================================================================= */}
+           PÁGINA 1: PORTADA EDITORIAL (Fondo Azul Marino)
+           ========================================================================= */}
       <Page size="A4" style={pdfStyles.coverPage}>
         <View style={pdfStyles.coverHeader}>
           <Image src={ISOLOGO_WHITE_BASE64} style={pdfStyles.coverLogo} />
@@ -256,8 +264,8 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
       </Page>
 
       {/* =========================================================================
-          PÁGINA 2: RESUMEN DE LA COTIZACIÓN
-          ========================================================================= */}
+           PÁGINA 2: RESUMEN DE LA COTIZACIÓN
+           ========================================================================= */}
       <Page size="A4" style={pdfStyles.interiorPage}>
         <InteriorHeader brand={issuer.name} tag={issuer.brandSubtitle} />
 
@@ -313,20 +321,27 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
           />
         )}
 
-        {/* 2. Total y esquema de pagos */}
+        {/* 2. Esquema de pagos y total a pagar por el cliente */}
         <View wrap={false}>
-          <Text style={pdfStyles.blockLabel}>2 · Cuánto y cuándo se paga</Text>
+          <Text style={pdfStyles.blockLabel}>2 · Esquema de pagos y total a pagar por el cliente</Text>
           <View style={pdfStyles.totalHero}>
             <View style={{ flex: 1, paddingRight: 14 }}>
               <Text style={pdfStyles.totalHeroLabel}>{paymentPlan.totalLabel}</Text>
               <Text style={pdfStyles.totalHeroCaption}>{paymentPlan.totalCaption}</Text>
             </View>
-            <Text style={pdfStyles.totalHeroAmount}>
-              {paymentPlan.totalAmount}
-              {paymentPlan.totalSuffix ? (
-                <Text style={pdfStyles.totalHeroSuffix}> {paymentPlan.totalSuffix}</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={pdfStyles.totalHeroAmount}>
+                {paymentPlan.totalAmount}
+                {paymentPlan.totalSuffix ? (
+                  <Text style={pdfStyles.totalHeroSuffix}> {paymentPlan.totalSuffix}</Text>
+                ) : null}
+              </Text>
+              {!isCustom && paymentPlan.recurring ? (
+                <Text style={{ fontSize: 7.5, color: pdfColors.brass100, marginTop: 2 }}>
+                  + {paymentPlan.recurring.amount} {paymentPlan.recurring.periodLabel} (mantención/hosting)
+                </Text>
               ) : null}
-            </Text>
+            </View>
           </View>
 
           {useCards ? (
@@ -336,26 +351,63 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
               ))}
             </View>
           ) : (
-            <View style={pdfStyles.table}>
+            <View style={[pdfStyles.table, { marginBottom: 5 }]}>
               <View style={pdfStyles.tableHeaderRow}>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '25%' }]}>Cuota</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '50%' }]}>Cuándo</Text>
-                <Text style={[pdfStyles.tableHeaderCell, { width: '25%', textAlign: 'right' }]}>Monto</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '22%' }]}>Cuota</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '36%' }]}>Cuándo se paga</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '24%' }]}>Detalle</Text>
+                <Text style={[pdfStyles.tableHeaderCell, { width: '18%', textAlign: 'right' }]}>Monto</Text>
               </View>
               {steps.map((s, i) => (
                 <View
                   key={i}
                   style={[pdfStyles.stepListRow, s.isDeposit ? { backgroundColor: '#FCF8EE' } : {}]}
                 >
-                  <Text style={[pdfStyles.tableCell, { width: '25%', fontWeight: 700, color: pdfColors.navy900 }]}>
+                  <Text style={[pdfStyles.tableCell, { width: '22%', fontWeight: 700, color: pdfColors.navy900 }]}>
                     {s.title}
                   </Text>
-                  <Text style={[pdfStyles.tableCell, { width: '50%', color: pdfColors.inkMuted }]}>{s.when}</Text>
-                  <Text style={[pdfStyles.tableCellRight, { width: '25%' }]}>{s.amount}</Text>
+                  <Text style={[pdfStyles.tableCell, { width: '36%', color: pdfColors.inkMuted, fontSize: 7.8 }]}>
+                    {s.when}
+                  </Text>
+                  <Text style={[pdfStyles.tableCell, { width: '24%', color: pdfColors.inkMuted, fontSize: 7.5 }]}>
+                    {s.percentLabel || ''}
+                  </Text>
+                  <Text style={[pdfStyles.tableCellRight, { width: '18%' }]}>{s.amount}</Text>
                 </View>
               ))}
             </View>
           )}
+
+          {/* Barra totalizadora de desembolso del cliente */}
+          <View
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: pdfColors.navy50,
+              borderWidth: 1,
+              borderColor: pdfColors.navy700,
+              borderRadius: 6,
+              paddingTop: 6,
+              paddingBottom: 6,
+              paddingLeft: 12,
+              paddingRight: 12,
+              marginBottom: 6,
+            }}
+          >
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={{ fontSize: 7.8, fontWeight: 700, color: pdfColors.navy900 }}>
+                {paymentPlan.summaryTotalLabel}
+              </Text>
+              <Text style={{ fontSize: 7.2, color: pdfColors.inkMuted, marginTop: 1 }}>
+                {paymentPlan.summaryFormula}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: pdfColors.navy900 }}>
+              {paymentPlan.summaryTotalAmount}
+            </Text>
+          </View>
 
           {paymentPlan.recurring && (
             <View style={pdfStyles.recurringBox}>
@@ -363,7 +415,7 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
                 <Text style={pdfStyles.stepTitle}>{paymentPlan.recurring.label}</Text>
                 <Text style={pdfStyles.stepWhen}>{paymentPlan.recurring.detail}</Text>
               </View>
-              <Text style={{ fontSize: 13, fontWeight: 700, color: pdfColors.navy900 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: 700, color: pdfColors.navy900 }}>
                 {paymentPlan.recurring.amount}
                 <Text style={{ fontSize: 8.5, fontWeight: 500, color: pdfColors.inkMuted }}>
                   {' '}
@@ -377,31 +429,41 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
         {/* 3. Plazos y datos de pago */}
         <View wrap={false}>
           <Text style={pdfStyles.blockLabel}>3 · Plazos y forma de pago</Text>
-          <View style={[pdfStyles.twoCols, { marginBottom: 4 }]}>
+          <View style={[pdfStyles.twoCols, { marginBottom: 3 }]}>
             <View style={[pdfStyles.callout, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
-              <Text style={{ fontWeight: 700, fontSize: 8.5, marginBottom: 2 }}>Plazo de entrega</Text>
-              <Text style={{ fontSize: 8, lineHeight: 1.35 }}>{deliveryText}</Text>
+              <Text style={{ fontWeight: 700, fontSize: 8.2, marginBottom: 1.5 }}>Plazo de entrega</Text>
+              <Text style={{ fontSize: 7.6, lineHeight: 1.32 }}>{deliveryText}</Text>
             </View>
-            <View style={[pdfStyles.callout, { flex: 1, marginTop: 0, marginBottom: 0, borderLeftColor: pdfColors.brass }]}>
-              <Text style={{ fontWeight: 700, fontSize: 8.5, marginBottom: 2 }}>Datos para transferencia</Text>
+            <View
+              style={[
+                pdfStyles.callout,
+                { flex: 1, marginTop: 0, marginBottom: 0, borderLeftColor: pdfColors.brass },
+              ]}
+            >
+              <Text style={{ fontWeight: 700, fontSize: 8.2, marginBottom: 1.5 }}>Datos para transferencia</Text>
               {issuer.bankDetails.map((line, idx) => (
-                <Text key={idx} style={{ fontSize: 8, lineHeight: 1.35 }}>{line}</Text>
+                <Text key={idx} style={{ fontSize: 7.6, lineHeight: 1.32 }}>
+                  {line}
+                </Text>
               ))}
             </View>
           </View>
         </View>
 
         {currency === 'USD' && exchangeRate && (
-          <Text style={{ marginTop: 4, fontSize: 7.2, color: pdfColors.inkMuted }}>
+          <Text style={{ marginTop: 3, fontSize: 7, color: pdfColors.inkMuted }}>
             * Valores expresados en USD al tipo de cambio de referencia de {exchangeRate} CLP por 1 USD.{' '}
             {quote.exchangeNote || ''}
           </Text>
         )}
 
-        {includeServices && (
-          <Text style={{ marginTop: 4, fontSize: 7.2, color: pdfColors.inkMuted }}>
-            En las páginas siguientes encontrarás un anexo con una breve presentación de los servicios
-            y sus condiciones.
+        {(includeDisclaimer || includeServices) && (
+          <Text style={{ marginTop: 3, fontSize: 7, color: pdfColors.inkMuted }}>
+            {includeDisclaimer && includeServices
+              ? 'En las páginas siguientes se incluye el Descargo de Responsabilidad de esta modalidad y el Anexo de Presentación de Servicios.'
+              : includeDisclaimer
+              ? 'En la página siguiente se incluye el Descargo de Responsabilidad aplicable a la modalidad cotizada.'
+              : 'En las páginas siguientes encontrarás un anexo con una breve presentación de los servicios y sus condiciones.'}
           </Text>
         )}
 
@@ -409,8 +471,15 @@ export const QuoteDocument: React.FC<QuoteDocumentProps> = ({ quote, skeletonDes
       </Page>
 
       {/* =========================================================================
-          PÁGINAS 3+: ANEXO OPCIONAL "PRESENTACIÓN DE SERVICIOS"
-          ========================================================================= */}
+           PÁGINA 3 (SI APLICA): DESCARGO DE RESPONSABILIDAD (Estática o Venta)
+           ========================================================================= */}
+      {includeDisclaimer && (
+        <DisclaimerPage quote={quote} depositFormatted={pricing.formatted.deposit} />
+      )}
+
+      {/* =========================================================================
+           PÁGINAS SIGUIENTES: ANEXO OPCIONAL "PRESENTACIÓN DE SERVICIOS"
+           ========================================================================= */}
       {includeServices && <ServicesPresentation quote={quote} />}
 
       {/* Renderizar el Esqueleto de Diseño al final si está incluido */}

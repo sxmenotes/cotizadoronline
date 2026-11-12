@@ -416,6 +416,7 @@ export const HistoryPage: React.FC = () => {
                   options={[
                     { value: 'all', label: 'Tipo: Todos' },
                     { value: 'construccion', label: 'Construcción' },
+                    { value: 'estatica', label: 'Pub. estática' },
                     { value: 'venta', label: 'Venta código' },
                   ]}
                 />
@@ -476,7 +477,11 @@ export const HistoryPage: React.FC = () => {
             )}
             {projectTypeFilter !== 'all' && (
               <Badge variant="navy" size="sm">
-                {projectTypeFilter === 'construccion' ? 'Construcción' : 'Venta'}
+                {projectTypeFilter === 'construccion'
+                  ? 'Construcción'
+                  : projectTypeFilter === 'estatica'
+                  ? 'Pub. estática'
+                  : 'Venta'}
               </Badge>
             )}
             {currencyFilter !== 'all' && (
@@ -613,6 +618,8 @@ export const HistoryPage: React.FC = () => {
                                 : 'Cuotas'
                               : quote.projectType === 'construccion'
                               ? 'Construcción'
+                              : quote.projectType === 'estatica'
+                              ? 'Pub. estática'
                               : 'Venta código'}
                           </strong>
                         </span>

@@ -257,4 +257,28 @@ describe('Documento PDF del Presupuesto (Sección 9.4)', () => {
     expect(fullText).toContain('$100.000');
     expect(fullText).toContain('$300.000');
   });
+
+  it('Caso 10: Modalidad Publicación estática suma $10.000 fijos e incluye página de Descargo de responsabilidad', async () => {
+    const quote = makeQuote({
+      projectType: 'estatica',
+      planId: 'landing',
+      extraPages: 0,
+      includeServicesInPdf: false,
+    });
+    const { fullText, numPages, allPagesText } = await extractPdfData(
+      React.createElement(QuoteDocument, { quote })
+    );
+
+    // Sin anexo de servicios: Portada (1) + Resumen (2) + Descargo de responsabilidad (3) = 3 páginas
+    expect(numPages).toBe(3);
+    expect(allPagesText[1]).toContain('Publicación estática (sin mantención)');
+    expect(allPagesText[1]).toContain('$100.000');
+    expect(allPagesText[1]).toContain('$10.000');
+    expect(allPagesText[1]).toContain('$110.000');
+    expect(allPagesText[1]).toContain('$55.000');
+    expect(allPagesText[2]).toContain('Descargo de responsabilidad');
+    expect(allPagesText[2]).toContain('Sitio cerrado a ediciones y modificaciones posteriores');
+    expect(allPagesText[2]).toContain('Cambios futuros sujetos a valores adicionales');
+    expect(fullText).not.toContain('\ufffd');
+  });
 });

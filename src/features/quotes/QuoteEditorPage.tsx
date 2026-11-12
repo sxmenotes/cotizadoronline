@@ -29,8 +29,12 @@ import {
 import { useQuotesStore } from '../../store/quotesStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useSkeletonStore } from '../../store/skeletonStore';
-import { calculatePricing, PricingResult } from '../../domain/pricing';
-import { shouldIncludeServices } from '../../domain/paymentSchedule';
+import {
+   calculatePricing,
+   PricingResult,
+   STATIC_PUBLICATION_SURCHARGE_CLP,
+} from '../../domain/pricing';
+import { shouldIncludeDisclaimer, shouldIncludeServices } from '../../domain/paymentSchedule';
 import type {
   Quote,
   QuoteVersionType,
@@ -697,7 +701,7 @@ export const QuoteEditorPage: React.FC = () => {
               <span className="block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
                 Contenido del PDF
               </span>
-              <div className="flex flex-col justify-center gap-1.5 rounded-lg border border-hairline bg-paper-1 p-3">
+              <div className="flex flex-col justify-center gap-2 rounded-lg border border-hairline bg-paper-1 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-navy-900">Incluir presentación de servicios</p>
@@ -711,6 +715,15 @@ export const QuoteEditorPage: React.FC = () => {
                     aria-label="Incluir presentación de servicios en el PDF"
                   />
                 </div>
+                {shouldIncludeDisclaimer(currentQuote) && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-hairline/60 text-[11px] text-navy-800">
+                    <ShieldCheck className="h-3.5 w-3.5 text-brass shrink-0" />
+                    <span>
+                      <strong>Página de Descargo de Responsabilidad activa:</strong> Se incluye automáticamente debajo del resumen de cotización para la modalidad{' '}
+                      <em>{currentQuote.projectType === 'estatica' ? 'Publicación estática' : 'Venta con código fuente'}</em>.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1152,6 +1165,7 @@ export const QuoteEditorPage: React.FC = () => {
                   <SegmentedControl
                     options={[
                       { value: 'construccion', label: 'Construcción y mantención' },
+                      { value: 'estatica', label: 'Publicación estática' },
                       { value: 'venta', label: 'Venta con código fuente' },
                     ]}
                     value={currentQuote.projectType}
@@ -1160,7 +1174,9 @@ export const QuoteEditorPage: React.FC = () => {
                   <p className="mt-1.5 text-xs text-ink-muted">
                     {currentQuote.projectType === 'construccion'
                       ? 'Construcción completa con opción de suscripción mensual de mantenimiento y hosting.'
-                      : 'Venta de la solución completa con entrega y cesión del código fuente sin suscripciones recurrentes.'}
+                      : currentQuote.projectType === 'estatica'
+                      ? `Mismos planes de construcción + $${STATIC_PUBLICATION_SURCHARGE_CLP.toLocaleString('es-CL')} CLP fijos de publicación. Sin mantención mensual: una vez publicada la página no podrá modificarse ni editarse y cualquier cambio futuro estará sujeto a valores adicionales (incluye página de Descargo de Responsabilidad).`
+                      : 'Venta de la solución completa con entrega y cesión del código fuente sin suscripciones recurrentes (incluye página de Descargo de Responsabilidad).'}
                   </p>
                 </div>
 
@@ -1171,7 +1187,11 @@ export const QuoteEditorPage: React.FC = () => {
                     options={[
                       ...currentQuote.catalog.plans.map((p) => {
                         const rawPrice =
-                          currentQuote.projectType === 'venta' ? p.sale.price : p.build.price;
+                          currentQuote.projectType === 'venta'
+                            ? p.sale.price
+                            : currentQuote.projectType === 'estatica'
+                            ? p.build.price + STATIC_PUBLICATION_SURCHARGE_CLP
+                            : p.build.price;
                         const priceLabel =
                           currentQuote.currency === 'USD' && currentQuote.exchangeRate && currentQuote.exchangeRate > 0
                             ? `US$${(rawPrice / currentQuote.exchangeRate).toFixed(2)}`
@@ -1306,6 +1326,8 @@ export const QuoteEditorPage: React.FC = () => {
                 <span className="text-[11px] text-white/50 truncate max-w-[140px]">
                   {currentQuote.quoteMode === 'custom'
                     ? currentQuote.customConfig?.itemName || 'Servicio a medida'
+                    : currentQuote.projectType === 'estatica'
+                    ? 'Plan + Pub. estática'
                     : 'Plan + Páginas extra'}
                 </span>
               </div>
@@ -1390,6 +1412,8 @@ export const QuoteEditorPage: React.FC = () => {
                       : `${currentQuote.customConfig?.installmentsCount || 2} cuotas`
                     : currentQuote.projectType === 'construccion'
                     ? 'Mantención + Hosting'
+                    : currentQuote.projectType === 'estatica'
+                    ? 'Sin mantención (estática)'
                     : 'Venta única'}
                 </span>
               </div>
